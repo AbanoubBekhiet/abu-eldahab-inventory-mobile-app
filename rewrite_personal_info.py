@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+with open('src/app/personal-info.tsx', 'w') as f:
+    f.write("""import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -493,3 +494,4 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 });
+""")

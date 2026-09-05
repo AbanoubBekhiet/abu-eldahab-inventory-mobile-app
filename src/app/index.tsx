@@ -9,6 +9,8 @@ import {
 	FlatList,
 	Alert,
 	ActivityIndicator,
+	Image,
+	Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -24,10 +26,13 @@ import {
 	addProductToCart,
 	updateCartItemQty,
 	isAdminOrSubAdmin,
+	fetchActiveOffers,
+	getSettingsLogoUrl,
 	Product,
 	Category,
 	CartItem,
 	User,
+	OfferItem,
 } from "../services/api";
 import MobileFooterNav from "../components/mobile-footer";
 import { AppImage } from "../components/app-image";
@@ -51,23 +56,40 @@ export default function MobileHomeScreen() {
 	// Real Persistent Cart State
 	const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
+	// Active Offers
+	const [activeOffers, setActiveOffers] = useState<OfferItem[]>([]);
+
+	// Logo URL
+	const logoUrl = getSettingsLogoUrl();
+
+	// Carousel State
+	const [activeOfferIndex, setActiveOfferIndex] = useState(0);
+	const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: any[] }) => {
+		if (viewableItems.length > 0) {
+			setActiveOfferIndex(viewableItems[0].index || 0);
+		}
+	}, []);
+	const viewabilityConfig = { itemVisiblePercentThreshold: 50 };
+
 	// Refresh cart + favorites every time screen is focused
 	useFocusEffect(
 		useCallback(() => {
 			let active = true;
 			const loadData = async () => {
 				try {
-					const [user, cats, favs, cart] = await Promise.all([
+					const [user, cats, favs, cart, offers] = await Promise.all([
 						fetchUserProfile(),
 						fetchCategories(),
 						getFavoriteIds(),
 						getCartItems(),
+						fetchActiveOffers(),
 					]);
 					if (!active) return;
 					if (user) setUserProfile(user);
 					setCategories(Array.isArray(cats) ? cats : []);
 					setFavoriteIds(Array.isArray(favs) ? [...favs.map(Number)] : []);
 					setCartItems(Array.isArray(cart) ? [...cart] : []);
+					setActiveOffers(Array.isArray(offers) ? offers : []);
 				} catch (e) {
 					if (!active) return;
 					setCategories([]);
@@ -159,7 +181,13 @@ export default function MobileHomeScreen() {
 			const idx = prev.findIndex((i) => Number(i.product_id || i.id) === targetId);
 			if (idx > -1) {
 				const updated = [...prev];
-				updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + 1 };
+				let newQty = updated[idx].quantity + 1;
+				const maxLimit = product.max_app_order_quantity;
+				const maxLimitNum = Number(maxLimit);
+				if (maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+					if (newQty > maxLimitNum) newQty = maxLimitNum;
+				}
+				updated[idx] = { ...updated[idx], quantity: newQty };
 				return updated;
 			} else {
 				return [
@@ -185,12 +213,37 @@ export default function MobileHomeScreen() {
 
 	const handleUpdateCartQty = async (productId: number | string, delta: number) => {
 		const pId = Number(productId);
+		const existing = cartItems.find((i) => Number(i.product_id || i.id) === pId);
+
+		if (delta > 0 && existing && !isAdminOrSubAdmin(userProfile)) {
+			const maxAllowed = existing.max_app_order_quantity;
+			const maxAllowedNum = Number(maxAllowed);
+			if (
+				maxAllowed !== null &&
+				maxAllowed !== undefined &&
+				!isNaN(maxAllowedNum) &&
+				maxAllowedNum > 0 &&
+				existing.quantity >= maxAllowedNum
+			) {
+				Alert.alert(
+					"حد الكمية المسموحة",
+					`عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+				);
+				return;
+			}
+		}
+
 		// Optimistic update
 		setCartItems((prev) => {
 			const updated = prev
 				.map((item) => {
 					if (Number(item.product_id || item.id) === pId) {
-						const newQty = item.quantity + delta;
+						let newQty = item.quantity + delta;
+						const maxLimit = item.max_app_order_quantity;
+						const maxLimitNum = Number(maxLimit);
+						if (delta > 0 && maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+							if (newQty > maxLimitNum) newQty = maxLimitNum;
+						}
 						return newQty > 0 ? { ...item, quantity: newQty } : null;
 					}
 					return item;
@@ -208,11 +261,6 @@ export default function MobileHomeScreen() {
 
 	return (
 		<SafeAreaView style={styles.container}>
-			{/* FMCG Header */}
-			<View style={styles.header}>
-				<Text style={styles.brandTitle}>أبو الدهب للمواد الاستهلاكية</Text>
-			</View>
-
 			<FlatList
 				data={loading ? [] : products}
 				keyExtractor={(item) => String(item.id)}
@@ -223,42 +271,109 @@ export default function MobileHomeScreen() {
 				onEndReachedThreshold={0.4}
 				ListHeaderComponent={
 					<>
-						{/* Real Customer Greeting Header */}
+						{/* Greeting Header with App Logo & User Name */}
 						<View style={styles.greetingHeader}>
 							<View style={styles.userAvatarBadge}>
-								<MaterialIcons name="person" size={26} color="#2D3C1F" />
+								<Image
+									source={{ uri: logoUrl }}
+									style={{ width: 40, height: 40, borderRadius: 20 }}
+									resizeMode="contain"
+								/>
 							</View>
 							<View style={styles.greetingTexts}>
 								<Text style={styles.greetingTitle}>
 									{userProfile?.name ? `صباح الخير، ${userProfile.name}` : "مرحباً بك في تطبيق أبو الدهب"}
 								</Text>
 								<Text style={styles.greetingSub}>
-									{userProfile?.shop_name || "جاهز لتسوق المواد الاستهلاكية والغذائية اليوم؟"}
+									{userProfile?.shop_name || "جاهز لتسوق الخردوات والمنظفات والورقيات اليوم؟"}
 								</Text>
 							</View>
 						</View>
 
-						{/* FMCG Wholesale Banner */}
-						<View style={styles.heroCard}>
-							<View style={styles.heroContent}>
-								<Text style={styles.heroTitle}>أفضل أسعار الجملة للمواد الاستهلاكية</Text>
-								<Text style={styles.heroSub}>
-									جميع المنتجات الغذائية والاستهلاكية بأسعار التجزئة والجملة المباشرة
-								</Text>
-								<TouchableOpacity
-									style={styles.heroCtaBtn}
-									onPress={() => router.push('/explore')}
-								>
-									<Text style={styles.heroCtaText}>تسوق العروض الآن</Text>
-								</TouchableOpacity>
+						{/* Offers Carousel / FMCG Wholesale Banner */}
+						{activeOffers.length > 0 ? (
+							<View style={{ marginVertical: 10 }}>
+								<FlatList
+									data={activeOffers}
+									keyExtractor={(item) => String(item.id)}
+									horizontal
+									pagingEnabled
+									showsHorizontalScrollIndicator={false}
+									onViewableItemsChanged={onViewableItemsChanged}
+									viewabilityConfig={viewabilityConfig}
+									renderItem={({ item }) => (
+										<View style={{ width: Dimensions.get('window').width }}>
+											<TouchableOpacity
+												style={[styles.heroCard, { marginHorizontal: 20, marginVertical: 0, padding: 0 }]}
+												onPress={() => router.push('/offers')}
+												activeOpacity={0.9}
+											>
+												<View style={{ position: 'absolute', inset: 0, backgroundColor: '#2D3C1F' }}>
+													<AppImage
+														uri={item.product_image_url}
+														style={{ width: '100%', height: '100%', opacity: 0.4 }}
+														iconName="local-offer"
+														iconSize={40}
+													/>
+												</View>
+												<View style={[styles.heroContent, { zIndex: 1, padding: 20 }]}>
+													<View style={styles.offerDiscountBadge}>
+														<Text style={styles.offerDiscountText}>خصم {item.discount_percentage}%</Text>
+													</View>
+													<Text style={styles.heroTitle} numberOfLines={2}>{item.product_name}</Text>
+													<View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 14 }}>
+														<Text style={{ color: '#FFF', fontSize: 24, fontWeight: 'bold' }}>{item.offer_price} ج.م</Text>
+														<Text style={{ color: '#BACDA5', fontSize: 16, textDecorationLine: 'line-through' }}>{item.original_price}</Text>
+													</View>
+													<TouchableOpacity
+														style={styles.heroCtaBtn}
+														onPress={() => router.push('/offers')}
+													>
+														<Text style={styles.heroCtaText}>تسوق العرض الآن</Text>
+													</TouchableOpacity>
+												</View>
+											</TouchableOpacity>
+										</View>
+									)}
+								/>
+								{activeOffers.length > 1 && (
+									<View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12, gap: 6 }}>
+										{activeOffers.map((_, idx) => (
+											<View
+												key={idx}
+												style={{
+													width: activeOfferIndex === idx ? 20 : 8,
+													height: 8,
+													borderRadius: 4,
+													backgroundColor: activeOfferIndex === idx ? '#2D3C1F' : '#D4EAB7',
+												}}
+											/>
+										))}
+									</View>
+								)}
 							</View>
-						</View>
+						) : (
+							<View style={styles.heroCard}>
+								<View style={styles.heroContent}>
+									<Text style={styles.heroTitle}>أفضل أسعار الجملة للمواد الاستهلاكية</Text>
+									<Text style={styles.heroSub}>
+										جميع الخردوات والمنظفات والورقيات بأسعار التجزئة والجملة المباشرة
+									</Text>
+									<TouchableOpacity
+										style={styles.heroCtaBtn}
+										onPress={() => router.push('/offers')}
+									>
+										<Text style={styles.heroCtaText}>تسوق العروض الآن</Text>
+									</TouchableOpacity>
+								</View>
+							</View>
+						)}
 
 						{/* FMCG Search Container */}
 						<View style={styles.searchContainer}>
 							<TextInput
 								style={styles.searchInput}
-								placeholder="ابحث عن المواد الغذائية أو الاستهلاكية والمنظفات..."
+								placeholder="ابحث عن الخردوات، المنظفات، أو الورقيات..."
 								value={search}
 								onChangeText={setSearch}
 								placeholderTextColor="#75786E"
@@ -315,14 +430,14 @@ export default function MobileHomeScreen() {
 
 						{/* Products Section Header */}
 						<View style={styles.sectionHeaderRow}>
-							<Text style={styles.sectionTitle}>أحدث المواد الاستهلاكية</Text>
+							<Text style={styles.sectionTitle}>أحدث الخردوات والمنظفات والورقيات</Text>
 						</View>
 
 						{loading && (
 							<View style={styles.centerContainer}>
 								<ActivityIndicator size="large" color="#2D3C1F" />
 								<Text style={styles.loadingText}>
-									جاري تحميل المنتجات الاستهلاكية...
+									جاري تحميل الخردوات والمنظفات والورقيات...
 								</Text>
 							</View>
 						)}
@@ -330,7 +445,7 @@ export default function MobileHomeScreen() {
 							<View style={styles.centerContainer}>
 								<MaterialIcons name="inventory-2" size={48} color="#75786E" />
 								<Text style={styles.emptyText}>
-									لا توجد مواد استهلاكية متاحة حالياً
+									لا توجد خردوات أو منظفات أو ورقيات متاحة حالياً
 								</Text>
 							</View>
 						)}
@@ -375,13 +490,28 @@ export default function MobileHomeScreen() {
 								/>
 							</View>
 
-							<Text style={styles.categoryName}>{item.category_name || "مواد استهلاكية"}</Text>
+							<Text style={styles.categoryName}>{item.category_name || "خردوات ومنظفات وورقيات"}</Text>
 							<Text style={styles.productTitle} numberOfLines={2}>
 								{item.name}
 							</Text>
 
+							{/* Purchase limit badge */}
+							{item.max_app_order_quantity && item.max_app_order_quantity > 0 && (
+								<View style={styles.limitBadge}>
+									<MaterialIcons name="info-outline" size={10} color="#92400E" />
+									<Text style={styles.limitBadgeText}>حد الشراء: {item.max_app_order_quantity}</Text>
+								</View>
+							)}
+
 							<View style={styles.priceRow}>
-								<Text style={styles.priceText}>{displayPrice} ج.م</Text>
+								{(item as any).active_offer ? (
+									<View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+										<Text style={styles.priceText}>{displayPrice} ج.م</Text>
+										<Text style={styles.oldPriceText}>{(item as any).active_offer.original_price}</Text>
+									</View>
+								) : (
+									<Text style={styles.priceText}>{displayPrice} ج.م</Text>
+								)}
 							</View>
 
 							{qtyInCart === 0 ? (
@@ -717,5 +847,84 @@ const styles = StyleSheet.create({
 		marginTop: 10,
 		fontSize: 14,
 		color: "#75786E",
+	},
+	// ── Offer Styles ──
+	offerCard: {
+		width: 140,
+		backgroundColor: "#FFF",
+		borderRadius: 16,
+		padding: 10,
+		borderWidth: 1,
+		borderColor: "#EAE1D5",
+		position: "relative",
+	},
+	offerDiscountBadge: {
+		position: "absolute",
+		top: 8,
+		left: 8,
+		backgroundColor: "#BA1A1A",
+		paddingHorizontal: 6,
+		paddingVertical: 2,
+		borderRadius: 8,
+		zIndex: 10,
+	},
+	offerDiscountText: {
+		color: "#FFF",
+		fontSize: 10,
+		fontWeight: "bold",
+	},
+	offerImage: {
+		width: "100%",
+		height: 80,
+		borderRadius: 12,
+		marginBottom: 6,
+	},
+	offerProductName: {
+		fontSize: 11,
+		fontWeight: "bold",
+		color: "#1F1B13",
+		textAlign: "right",
+		marginBottom: 4,
+	},
+	offerNewPrice: {
+		fontSize: 13,
+		fontWeight: "bold",
+		color: "#2D3C1F",
+	},
+	offerOldPrice: {
+		fontSize: 11,
+		color: "#BA1A1A",
+		textDecorationLine: "line-through",
+	},
+	offerLimitText: {
+		fontSize: 9,
+		color: "#92400E",
+		fontWeight: "600",
+		textAlign: "right",
+		marginTop: 2,
+	},
+	// ── Purchase Limit Badge ──
+	limitBadge: {
+		flexDirection: "row-reverse",
+		alignItems: "center",
+		gap: 3,
+		backgroundColor: "#FEF3C7",
+		paddingHorizontal: 6,
+		paddingVertical: 2,
+		borderRadius: 6,
+		alignSelf: "flex-end",
+		marginVertical: 2,
+	},
+	limitBadgeText: {
+		fontSize: 9,
+		color: "#92400E",
+		fontWeight: "700",
+	},
+	// ── Old Price (strikethrough) ──
+	oldPriceText: {
+		fontSize: 11,
+		color: "#BA1A1A",
+		textDecorationLine: "line-through",
+		fontWeight: "600",
 	},
 });

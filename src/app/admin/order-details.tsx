@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -182,10 +183,22 @@ export default function AdminOrderDetailsScreen() {
               <Text style={styles.contactText}>{customerPhone}</Text>
               <MaterialIcons name="phone" size={18} color="#75786E" />
             </View>
-            <View style={styles.contactItem}>
-              <Text style={styles.contactText}>{customerAddress}</Text>
-              <MaterialIcons name="location-on" size={18} color="#75786E" />
-            </View>
+            <TouchableOpacity
+              style={styles.contactItem}
+              onPress={() => {
+                if (order?.customer_latitude && order?.customer_longitude) {
+                  const url = `https://www.google.com/maps/search/?api=1&query=${order.customer_latitude},${order.customer_longitude}`;
+                  Linking.openURL(url).catch(() => {
+                    Alert.alert('خطأ', 'لا يمكن فتح خرائط جوجل.');
+                  });
+                } else {
+                  Alert.alert('تنبيه', 'لا يتوفر الموقع الجغرافي (GPS) لهذا العميل.');
+                }
+              }}
+            >
+              <Text style={[styles.contactText, { color: (order?.customer_latitude && order?.customer_longitude) ? '#0066CC' : '#75786E', textDecorationLine: (order?.customer_latitude && order?.customer_longitude) ? 'underline' : 'none' }]}>{customerAddress}</Text>
+              <MaterialIcons name="location-on" size={18} color={(order?.customer_latitude && order?.customer_longitude) ? "#0066CC" : "#75786E"} />
+            </TouchableOpacity>
           </View>
         </View>
 

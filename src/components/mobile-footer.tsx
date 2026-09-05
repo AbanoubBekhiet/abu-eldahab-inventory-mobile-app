@@ -20,6 +20,7 @@ export default function MobileFooterNav({ cartCount = 0, wishlistCount = 0, isAd
   const customerNavItems: NavItem[] = [
     { key: 'home', label: 'الرئيسية', icon: 'home', path: '/' },
     { key: 'shop', label: 'المتجر', icon: 'category', path: '/explore' },
+    { key: 'offers', label: 'العروض', icon: 'local-offer', path: '/offers' },
     { key: 'wishlist', label: 'المفضلة', icon: 'favorite', path: '/wishlist', badge: wishlistCount },
     { key: 'cart', label: 'السلة', icon: 'shopping-cart', path: '/cart', badge: cartCount },
     { key: 'profile', label: 'حسابي', icon: 'person', path: '/profile' },
@@ -28,6 +29,7 @@ export default function MobileFooterNav({ cartCount = 0, wishlistCount = 0, isAd
   const adminNavItems: NavItem[] = [
     { key: 'admin-orders', label: 'الطلبات', icon: 'receipt-long', path: '/admin' },
     { key: 'admin-products', label: 'المنتجات', icon: 'inventory', path: '/admin/products' },
+    { key: 'admin-offers', label: 'العروض', icon: 'local-offer', path: '/admin/offers' },
     { key: 'admin-customers', label: 'الحسابات', icon: 'account-balance-wallet', path: '/admin/customers' },
   ];
 

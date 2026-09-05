@@ -7,6 +7,7 @@ import {
   FlatList,
   ActivityIndicator,
 } from 'react-native';
+import { AppImage } from '../components/app-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -95,7 +96,7 @@ export default function OrdersHistoryScreen() {
             <View style={styles.centerContainer}>
               <MaterialIcons name="receipt-long" size={56} color="#75786E" />
               <Text style={styles.emptyTitle}>لا يوجد طلبات سابقة</Text>
-              <Text style={styles.emptySub}>عند قيامك بطلب منتجات استهلاكية ستظهر هنا فورياً</Text>
+              <Text style={styles.emptySub}>عند قيامك بطلب خردوات ومنظفات وورقيات ستظهر هنا فورياً</Text>
             </View>
           ) : null
         }
@@ -151,11 +152,24 @@ export default function OrdersHistoryScreen() {
 
                     return (
                       <View key={idx} style={styles.orderItemRow}>
+                        <View style={styles.orderItemRight}>
+                          <AppImage
+                            uri={prod.image_url}
+                            style={styles.orderItemImage}
+                            iconName="shopping-basket"
+                            iconSize={24}
+                          />
+                          <View style={styles.orderItemInfo}>
+                            <Text style={styles.orderItemNameText} numberOfLines={1}>
+                              {prodName}
+                            </Text>
+                            <Text style={styles.orderItemQtyText}>
+                              الكمية: {prodQty}
+                            </Text>
+                          </View>
+                        </View>
                         <Text style={styles.orderItemPriceText}>
                           {(Number(prodTotal) || 0).toFixed(2)} ج.م
-                        </Text>
-                        <Text style={styles.orderItemNameText} numberOfLines={1}>
-                          {prodName} × {prodQty}
                         </Text>
                       </View>
                     );
@@ -299,14 +313,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FAF5ED',
+  },
+  orderItemRight: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    flex: 1,
+  },
+  orderItemImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    marginLeft: 8,
+    backgroundColor: '#F6EDE0',
+  },
+  orderItemInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   orderItemNameText: {
     fontSize: 13,
     color: '#1F1B13',
-    flex: 1,
     textAlign: 'right',
-    marginRight: 8,
+  },
+  orderItemQtyText: {
+    fontSize: 11,
+    color: '#75786E',
+    marginTop: 2,
   },
   orderItemPriceText: {
     fontSize: 12,

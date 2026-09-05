@@ -9,6 +9,10 @@ interface AppImageProps {
   iconName?: keyof typeof MaterialIcons.glyphMap;
 }
 
+import { API_BASE_URL } from '../services/api';
+
+const SESSION_TS = Date.now();
+
 export function AppImage({
   uri,
   style,
@@ -16,8 +20,12 @@ export function AppImage({
   iconName = 'eco',
 }: AppImageProps) {
   const [error, setError] = useState(false);
+  const [fallbackError, setFallbackError] = useState(false);
 
-  if (!uri || error) {
+  const fallbackUri = `${API_BASE_URL}/settings-logo?v=${SESSION_TS}`;
+  const imageUri = uri && !error ? uri : fallbackUri;
+
+  if (fallbackError) {
     return (
       <View style={[styles.fallbackContainer, style]}>
         <View style={styles.badgeCircle}>
@@ -29,9 +37,15 @@ export function AppImage({
 
   return (
     <Image
-      source={{ uri }}
+      source={{ uri: imageUri }}
       style={style}
-      onError={() => setError(true)}
+      onError={() => {
+        if (imageUri === fallbackUri) {
+          setFallbackError(true);
+        } else {
+          setError(true);
+        }
+      }}
       resizeMode="cover"
     />
   );

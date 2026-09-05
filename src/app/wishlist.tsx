@@ -116,7 +116,13 @@ export default function WishlistScreen() {
       const idx = prev.findIndex((i) => Number(i.product_id || i.id) === targetId);
       if (idx > -1) {
         const updated = [...prev];
-        updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + 1 };
+        let newQty = updated[idx].quantity + 1;
+        const maxLimit = product.max_app_order_quantity;
+        const maxLimitNum = Number(maxLimit);
+        if (maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+          if (newQty > maxLimitNum) newQty = maxLimitNum;
+        }
+        updated[idx] = { ...updated[idx], quantity: newQty };
         return updated;
       } else {
         return [
@@ -141,11 +147,36 @@ export default function WishlistScreen() {
 
   const handleUpdateCartQty = async (productId: number | string, delta: number) => {
     const pId = Number(productId);
+    const existing = cartItems.find((i) => Number(i.product_id || i.id) === pId);
+
+    if (delta > 0 && existing && !isAdminOrSubAdmin(userProfile)) {
+      const maxAllowed = existing.max_app_order_quantity;
+      const maxAllowedNum = Number(maxAllowed);
+      if (
+        maxAllowed !== null &&
+        maxAllowed !== undefined &&
+        !isNaN(maxAllowedNum) &&
+        maxAllowedNum > 0 &&
+        existing.quantity >= maxAllowedNum
+      ) {
+        Alert.alert(
+          'حد الكمية المسموحة',
+          `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+        );
+        return;
+      }
+    }
+
     setCartItems((prev) => {
       const updated = prev
         .map((item) => {
           if (Number(item.product_id || item.id) === pId) {
-            const newQty = item.quantity + delta;
+            let newQty = item.quantity + delta;
+            const maxLimit = item.max_app_order_quantity;
+            const maxLimitNum = Number(maxLimit);
+            if (delta > 0 && maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+              if (newQty > maxLimitNum) newQty = maxLimitNum;
+            }
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
           return item;
@@ -217,7 +248,7 @@ export default function WishlistScreen() {
                     />
                   </View>
 
-                  <Text style={styles.categoryName}>{item.category_name || "مواد استهلاكية"}</Text>
+                  <Text style={styles.categoryName}>{item.category_name || "خردوات ومنظفات وورقيات"}</Text>
                   <Text style={styles.productTitle} numberOfLines={2}>
                     {item.name}
                   </Text>

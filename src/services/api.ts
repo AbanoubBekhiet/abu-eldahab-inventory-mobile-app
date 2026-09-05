@@ -66,6 +66,14 @@ export interface Product {
   image_url?: string | null;
   sku?: string;
   number_of_items_in_unit?: number;
+  active_offer?: {
+    id: number;
+    offer_price: number;
+    original_price: number;
+    discount_percentage: number;
+    expires_at: string;
+    offer_max_quantity?: number | null;
+  } | null;
 }
 
 export interface Category {
@@ -120,6 +128,9 @@ export interface Order {
   customer_name?: string;
   customer_phone?: string;
   customer_email?: string;
+  customer_address?: string;
+  customer_latitude?: number | null;
+  customer_longitude?: number | null;
   created_at?: string;
   date?: string;
   total_amount?: number;
@@ -130,6 +141,13 @@ export interface Order {
   notes?: string;
 }
 
+export interface Region {
+  id: number;
+  name: string;
+  min_order_total: number;
+  min_products_count: number;
+}
+
 export interface User {
   id: number;
   name: string;
@@ -138,6 +156,7 @@ export interface User {
   shop_name?: string;
   address?: string;
   role?: string;
+  region?: Region;
 }
 
 export interface OrderHistoryItem {
@@ -196,7 +215,14 @@ export async function addProductToCart(product: Product, quantity = 1): Promise<
 
   if (existingIndex > -1) {
     const existing = current[existingIndex];
-    const newQty = existing.quantity + quantity;
+    let newQty = existing.quantity + quantity;
+    const maxLimit = existing.max_app_order_quantity;
+    const maxLimitNum = Number(maxLimit);
+    if (maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+      if (newQty > maxLimitNum) {
+        newQty = maxLimitNum;
+      }
+    }
     current[existingIndex] = { ...existing, quantity: newQty };
   } else {
     current.push({
@@ -221,7 +247,14 @@ export async function updateCartItemQty(productId: number | string, delta: numbe
   const updated = current
     .map((item) => {
       if (Number(item.product_id || item.id) === pId) {
-        const newQty = item.quantity + delta;
+        let newQty = item.quantity + delta;
+        const maxLimit = item.max_app_order_quantity;
+        const maxLimitNum = Number(maxLimit);
+        if (delta > 0 && maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+          if (newQty > maxLimitNum) {
+            newQty = maxLimitNum;
+          }
+        }
         return newQty > 0 ? { ...item, quantity: newQty } : null;
       }
       return item;
@@ -339,6 +372,17 @@ export async function fetchProductsByIds(ids: number[]): Promise<Product[]> {
   }
 }
 
+export async function fetchRegions(): Promise<Region[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/regions`);
+    const data = await response.json();
+    return Array.isArray(data.data) ? data.data : [];
+  } catch (error) {
+    console.error('Error fetching regions:', error);
+    return [];
+  }
+}
+
 // Fetch categories from real API
 export async function fetchCategories(): Promise<Category[]> {
   try {
@@ -375,7 +419,7 @@ export async function placeCustomerOrder(items: { product_id: number; quantity: 
       body: JSON.stringify({
         items,
         payment_type: 'cash',
-        notes: notes || 'طلب مواد استهلاكية عبر التطبيق',
+        notes: notes || 'طلب خردوات ومنظفات وورقيات عبر التطبيق',
       }),
     });
     return await res.json();
@@ -542,7 +586,8 @@ export async function registerCustomer(
   shopName?: string,
   latitude?: number | null,
   longitude?: number | null,
-  fcmToken?: string | null
+  fcmToken?: string | null,
+  regionId?: number | null
 ) {
   const res = await fetch(`${API_BASE_URL}/auth/customer-register`, {
     method: 'POST',
@@ -559,7 +604,8 @@ export async function registerCustomer(
       shop_name: shopName,
       latitude,
       longitude,
-      fcm_token: fcmToken || null,
+      fcm_token: fcmToken,
+      region_id: regionId,
     }),
   });
   const data = await res.json();
@@ -712,6 +758,43 @@ export async function updateProductOnServer(
   }
 }
 
+export async function updateProfileOnServer(data: {
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  shop_name?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  region_id?: number | null;
+}) {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || 'فشل تحديث البيانات');
+    }
+
+    const json = await res.json();
+    return json;
+  } catch (error) {
+    console.error('Update profile error:', error);
+    throw error;
+  }
+}
+
 // Customers Accounts Management
 export interface CustomerAccount {
   id: number;
@@ -719,6 +802,8 @@ export interface CustomerAccount {
   phone?: string;
   shop_name?: string;
   address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   balance: number;
 }
 
@@ -893,3 +978,128 @@ export async function fetchAppSettings(): Promise<AppSettingsData | null> {
     return null;
   }
 }
+
+// ── Settings Logo URL ──
+
+export function getSettingsLogoUrl(): string {
+  return `${API_BASE_URL}/settings-logo`;
+}
+
+// ── Offers System ──
+
+export interface ActiveOffer {
+  id: number;
+  product_id: number;
+  offer_price: number;
+  original_price: number;
+  discount_percentage: number;
+  expires_at: string;
+  offer_max_quantity?: number | null;
+  product?: Product | null;
+}
+
+export interface OfferItem {
+  id: number;
+  product_id: number;
+  product_name: string;
+  product_image_url?: string | null;
+  category_name: string;
+  offer_price: number;
+  original_price: number;
+  discount_percentage: number;
+  offer_max_quantity?: number | null;
+  original_max_quantity?: number | null;
+  expires_at: string;
+  is_active: boolean;
+  is_expired: boolean;
+  is_currently_active: boolean;
+  created_by_name: string;
+  created_at: string;
+  product?: Product | null;
+}
+
+export async function fetchActiveOffers(): Promise<OfferItem[]> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/offers/active`, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.offers) ? data.offers : [];
+  } catch (error) {
+    console.error('Failed to fetch active offers:', error);
+    return [];
+  }
+}
+
+export async function fetchAllOffers(page: number = 1): Promise<{ offers: OfferItem[]; nextPage: number | null }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/offers?page=${page}`, { headers });
+    if (!res.ok) return { offers: [], nextPage: null };
+    const data = await res.json();
+    const items = data.offers?.data || [];
+    const nextPage = data.offers?.next_page ?? null;
+    return { offers: Array.isArray(items) ? items : [], nextPage };
+  } catch (error) {
+    console.error('Failed to fetch all offers:', error);
+    return { offers: [], nextPage: null };
+  }
+}
+
+export async function createOffer(payload: {
+  product_id: number;
+  offer_price: number;
+  offer_max_quantity?: number | null;
+  expires_at: string;
+}): Promise<{ success: boolean; message: string; offer?: OfferItem }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/offers`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, message: data.message || 'حدث خطأ أثناء إنشاء العرض' };
+    }
+    return { success: true, message: data.message || 'تم إضافة العرض بنجاح!', offer: data.offer };
+  } catch (error: any) {
+    console.error('Failed to create offer:', error);
+    return { success: false, message: error.message || 'تعذر الاتصال بالسيرفر' };
+  }
+}
+
+export async function deleteOffer(offerId: number): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/offers/${offerId}`, {
+      method: 'DELETE',
+      headers,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, message: data.message || 'حدث خطأ' };
+    }
+    return { success: true, message: data.message || 'تم إلغاء العرض بنجاح!' };
+  } catch (error: any) {
+    console.error('Failed to delete offer:', error);
+    return { success: false, message: error.message || 'تعذر الاتصال بالسيرفر' };
+  }
+}
+

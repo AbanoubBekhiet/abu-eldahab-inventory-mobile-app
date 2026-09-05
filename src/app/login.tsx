@@ -9,9 +9,12 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
+  FlatList,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import {
   loginCustomer,
@@ -20,6 +23,9 @@ import {
   loadSavedAuthToken,
   fetchUserProfile,
   isAdminOrSubAdmin,
+  fetchRegions,
+  Region,
+  getSettingsLogoUrl,
 } from '../services/api';
 import { getOrGenerateFcmToken } from '../services/fcm';
 
@@ -40,52 +46,50 @@ export default function LoginScreen() {
 
   const [loading, setLoading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
+  
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionId, setRegionId] = useState<number | null>(null);
+  const [regionModalVisible, setRegionModalVisible] = useState(false);
 
   useEffect(() => {
     checkExistingSession();
+    loadRegions();
   }, []);
 
+  const loadRegions = async () => {
+    const data = await fetchRegions();
+    setRegions(data);
+  };
+
+  const { manual } = useLocalSearchParams();
+
   const checkExistingSession = async () => {
+    if (manual === '1') {
+      setCheckingSession(false);
+      return;
+    }
     try {
       const token = await loadSavedAuthToken();
       if (token) {
-        // Try to get user profile — fallback to cached profile if server fails
         let user = null;
         try {
           user = await fetchUserProfile();
-        } catch (_e) {
-          // network error — use cached user from AsyncStorage
+        } catch (e) {
+          // Ignore network errors, if token exists we assume logged in for now if no fetch
         }
         if (user) {
           if (isAdminOrSubAdmin(user)) {
-            router.replace('/admin' as any);
+            router.replace('/admin');
           } else {
             router.replace('/');
           }
           return;
         }
-        // Even if fetchUserProfile returned null (e.g. 401), check AsyncStorage
-        // for a cached user to allow offline/token-still-valid-locally flow
-        try {
-          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-          const rawUser = await AsyncStorage.getItem('user_profile_v1');
-          if (rawUser) {
-            const cachedUser = JSON.parse(rawUser);
-            if (cachedUser) {
-              if (isAdminOrSubAdmin(cachedUser)) {
-                router.replace('/admin' as any);
-              } else {
-                router.replace('/');
-              }
-              return;
-            }
-          }
-        } catch (_e) {}
       }
-    } catch (e) {
-    } finally {
-      setCheckingSession(false);
+    } catch (error) {
+      console.log('No existing session', error);
     }
+    setCheckingSession(false);
   };
 
   // Get current native GPS location handler
@@ -108,43 +112,28 @@ export default function LoginScreen() {
       setLatitude(lat);
       setLongitude(lng);
 
-      try {
-        const geocoded = await Location.reverseGeocodeAsync({
-          latitude: lat,
-          longitude: lng,
-        });
-
-        if (geocoded && geocoded.length > 0) {
-          const addr = geocoded[0];
-          const parts = [
-            addr.street,
-            addr.district,
-            addr.city,
-            addr.region,
-            addr.country,
-          ].filter(Boolean);
-
-          if (parts.length > 0) {
-            setAddress(parts.join('، '));
-            Alert.alert('تم التحديد بنجاح 📍', 'تم تحديد موقعك بدقة واستخراج العنوان بنجاح!');
-            setGettingLocation(false);
-            return;
-          }
-        }
-      } catch (geoErr) {}
-
-      setAddress(`العنوان (إحداثيات: ${lat.toFixed(4)}, ${lng.toFixed(4)})`);
       Alert.alert('تم التحديد بنجاح 📍', 'تم التقاط إحداثيات موقعك عبر GPS بنجاح!');
     } catch (error: any) {
-      Alert.alert('تنبيه', 'تعذر الاتصال بخدمة الـ GPS على الهاتف. يمكنك كتابة العنوان يدوياً.');
+      Alert.alert(
+        'خدمة الموقع معطلة',
+        'يرجى تفعيل خدمة الـ GPS في الهاتف، ثم اضغط على "حاول مرة أخرى".',
+        [
+          { text: 'إلغاء', style: 'cancel' },
+          { text: 'حاول مرة أخرى', onPress: handleGetLocation }
+        ]
+      );
     } finally {
       setGettingLocation(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (!email || !password || (isRegister && (!name || !phone))) {
+    if (!password || (!isRegister && !email) || (isRegister && (!name || !phone))) {
       Alert.alert('تنبيه', 'يرجى إدخال جميع البيانات المطلوبة.');
+      return;
+    }
+    if (isRegister && (!latitude || !longitude)) {
+      Alert.alert('تنبيه', 'تحديد موقعك الحقيقي (GPS) إلزامي لإتمام التسجيل. يرجى الضغط على زر تحديد الموقع.');
       return;
     }
 
@@ -153,7 +142,12 @@ export default function LoginScreen() {
       const fcmToken = await getOrGenerateFcmToken();
       let res;
       if (isRegister) {
-        res = await registerCustomer(name, phone, email, password, address, shopName, latitude, longitude, fcmToken);
+        if (!regionId) {
+          Alert.alert('تنبيه', 'يرجى اختيار المنطقة');
+          setLoading(false);
+          return;
+        }
+        res = await registerCustomer(name, phone, email, password, address, shopName, latitude, longitude, fcmToken, regionId);
         Alert.alert('تم بنجاح', 'تم إنشاء حسابك الجديد بنجاح!');
       } else {
         res = await loginCustomer(email, password, fcmToken);
@@ -201,14 +195,14 @@ export default function LoginScreen() {
           <View style={styles.headerBox}>
             <View style={styles.logoCircle}>
               <Image
-                source={require('../../assets/images/react-logo.png')}
+                source={{ uri: getSettingsLogoUrl() }}
                 style={styles.logoImage}
                 resizeMode="contain"
               />
             </View>
             <Text style={styles.brandTitle}>أبو الدهب للمواد الاستهلاكية</Text>
             <Text style={styles.welcomeSubtitle}>
-              {isRegister ? 'تسجيل متجر / عميل جديد' : 'منصة التوزيع والجملة للمواد الغذائية والاستهلاكية'}
+              {isRegister ? 'تسجيل متجر / عميل جديد' : 'منصة التوزيع والجملة للخردوات والمنظفات والورقيات'}
             </Text>
           </View>
 
@@ -240,9 +234,53 @@ export default function LoginScreen() {
                   />
                 </View>
 
-                {/* Phone Field */}
+                {/* Address Field */}
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>رقم الهاتف</Text>
+                  <Text style={styles.label}>العنوان التفصيلي</Text>
+                  <TextInput
+                    style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
+                    placeholder="اكتب عنوانك بالتفصيل..."
+                    value={address}
+                    onChangeText={setAddress}
+                    multiline
+                    placeholderTextColor="#75786E"
+                  />
+                </View>
+
+                {/* Region Selector */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>منطقة التوصيل *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { justifyContent: 'center' }]}
+                    onPress={() => setRegionModalVisible(true)}
+                  >
+                    <Text style={{ color: regionId ? '#2D3C1F' : '#75786E', textAlign: 'right' }}>
+                      {regionId ? regions.find(r => r.id === regionId)?.name : 'اختر المنطقة...'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Big Location Button */}
+                <TouchableOpacity
+                  style={[styles.bigGpsBtn, latitude && longitude ? styles.bigGpsBtnSuccess : null]}
+                  onPress={handleGetLocation}
+                  disabled={gettingLocation}
+                >
+                  {gettingLocation ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="my-location" size={24} color="#FFFFFF" />
+                      <Text style={styles.bigGpsBtnText}>
+                        {latitude && longitude ? 'تم تحديد الموقع بنجاح ✓' : 'تحديد موقعي الحقيقي (GPS) *'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* Location GPS Picker Field */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>رقم الهاتف *</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="01XXXXXXXXX"
@@ -252,37 +290,12 @@ export default function LoginScreen() {
                     placeholderTextColor="#75786E"
                   />
                 </View>
-
-                {/* Location GPS Picker Field */}
-                <View style={styles.fieldGroup}>
-                  <View style={styles.labelRow}>
-                    <TouchableOpacity
-                      style={styles.gpsBtn}
-                      onPress={handleGetLocation}
-                      disabled={gettingLocation}
-                    >
-                      {gettingLocation ? (
-                        <ActivityIndicator size="small" color="#2D3C1F" />
-                      ) : (
-                        <Text style={styles.gpsBtnText}>تحديد موقعي الحقيقي (GPS) 📍</Text>
-                      )}
-                    </TouchableOpacity>
-                    <Text style={styles.label}>عنوان التوصيل</Text>
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="العنوان التفصيلي"
-                    value={address}
-                    onChangeText={setAddress}
-                    placeholderTextColor="#75786E"
-                  />
-                </View>
               </>
             )}
 
             {/* Email Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>البريد الإلكتروني</Text>
+              <Text style={styles.label}>{isRegister ? 'البريد الإلكتروني (اختياري)' : 'رقم الهاتف أو البريد الإلكتروني'}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="example@domain.com"
@@ -345,8 +358,38 @@ export default function LoginScreen() {
         </View>
 
         {/* Brand Caption Footer */}
-        <Text style={styles.brandCaption}>تطبيق أبو الدهب لتجارة المواد الاستهلاكية والغذائية بالجملة والتجزئة</Text>
+        <Text style={styles.brandCaption}>تطبيق أبو الدهب لتجارة الخردوات والمنظفات والورقيات بالجملة والتجزئة</Text>
       </ScrollView>
+
+      {/* Region Picker Modal */}
+      <Modal visible={regionModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>اختر منطقة التوصيل</Text>
+            <FlatList
+              data={regions}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setRegionId(item.id);
+                    setRegionModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalItemText}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setRegionModalVisible(false)}
+            >
+              <Text style={styles.modalCloseButtonText}>إلغاء</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -434,16 +477,24 @@ const styles = StyleSheet.create({
     color: '#2D3C1F',
     fontWeight: 'bold',
   },
-  gpsBtn: {
-    backgroundColor: '#D4EAB7',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  bigGpsBtn: {
+    backgroundColor: '#2D3C1F',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 8,
   },
-  gpsBtnText: {
-    fontSize: 11,
+  bigGpsBtnSuccess: {
+    backgroundColor: '#4E6A34',
+  },
+  bigGpsBtnText: {
+    color: '#FFF',
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#2D3C1F',
   },
   input: {
     backgroundColor: '#FBF2E5',
@@ -486,9 +537,51 @@ const styles = StyleSheet.create({
     color: '#2D3C1F',
   },
   brandCaption: {
-    fontSize: 11,
-    color: '#75786E',
-    marginTop: 20,
     textAlign: 'center',
+    fontSize: 10,
+    color: '#9A978F',
+    marginTop: 32,
+    marginBottom: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F1B13',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  modalItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F4F3EF',
+  },
+  modalItemText: {
+    fontSize: 16,
+    color: '#2D3C1F',
+    textAlign: 'center',
+  },
+  modalCloseButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    backgroundColor: '#F4F3EF',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#75786E',
   },
 });

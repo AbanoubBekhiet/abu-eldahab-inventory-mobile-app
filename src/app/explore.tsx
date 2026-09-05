@@ -135,8 +135,11 @@ export default function ShopExploreScreen() {
     const targetId = Number(product.id);
     const existing = cartItems.find((i) => Number(i.product_id || i.id) === targetId);
     const currentQty = existing?.quantity || 0;
-    const maxAllowed = product.max_app_order_quantity;
+    const maxAllowed = product.active_offer?.offer_max_quantity ?? product.max_app_order_quantity;
     const maxAllowedNum = Number(maxAllowed);
+    const effectivePrice = product.active_offer
+      ? Number(product.active_offer.offer_price) || 0
+      : Number(product.price) || 0;
 
     // Only enforce limits for customers — admins/sub-admins have no restrictions
     if (!isAdminOrSubAdmin(userProfile)) {
@@ -155,12 +158,24 @@ export default function ShopExploreScreen() {
       }
     }
 
+    const productForCart: Product = {
+      ...product,
+      price: effectivePrice,
+      max_app_order_quantity: maxAllowed,
+    };
+
     // Optimistic update
     setCartItems((prev) => {
       const idx = prev.findIndex((i) => Number(i.product_id || i.id) === targetId);
       if (idx > -1) {
         const updated = [...prev];
-        updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + 1 };
+        let newQty = updated[idx].quantity + 1;
+        const maxLimit = product.max_app_order_quantity;
+        const maxLimitNum = Number(maxLimit);
+        if (maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+          if (newQty > maxLimitNum) newQty = maxLimitNum;
+        }
+        updated[idx] = { ...updated[idx], quantity: newQty };
         return updated;
       } else {
         return [
@@ -169,29 +184,54 @@ export default function ShopExploreScreen() {
             id: targetId,
             product_id: targetId,
             name: product.name,
-            price: Number(product.price) || 0,
+            price: effectivePrice,
             quantity: 1,
             image_url: product.image_url,
             category_name: product.category_name,
-            max_app_order_quantity: product.max_app_order_quantity,
+            max_app_order_quantity: maxAllowed,
           },
         ];
       }
     });
 
     // Persist to storage
-    const updatedCart = await addProductToCart(product, 1);
+    const updatedCart = await addProductToCart(productForCart, 1);
     setCartItems([...updatedCart]);
   };
 
   const handleUpdateCartQty = async (productId: number | string, delta: number) => {
     const pId = Number(productId);
+    const existing = cartItems.find((i) => Number(i.product_id || i.id) === pId);
+
+    if (delta > 0 && existing && !isAdminOrSubAdmin(userProfile)) {
+      const maxAllowed = existing.max_app_order_quantity;
+      const maxAllowedNum = Number(maxAllowed);
+      if (
+        maxAllowed !== null &&
+        maxAllowed !== undefined &&
+        !isNaN(maxAllowedNum) &&
+        maxAllowedNum > 0 &&
+        existing.quantity >= maxAllowedNum
+      ) {
+        Alert.alert(
+          'حد الكمية المسموحة',
+          `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+        );
+        return;
+      }
+    }
+
     // Optimistic update
     setCartItems((prev) => {
       const updated = prev
         .map((item) => {
           if (Number(item.product_id || item.id) === pId) {
-            const newQty = item.quantity + delta;
+            let newQty = item.quantity + delta;
+            const maxLimit = item.max_app_order_quantity;
+            const maxLimitNum = Number(maxLimit);
+            if (delta > 0 && maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
+              if (newQty > maxLimitNum) newQty = maxLimitNum;
+            }
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
           return item;
@@ -211,7 +251,7 @@ export default function ShopExploreScreen() {
     <SafeAreaView style={styles.container}>
       {/* Top App Header */}
       <View style={styles.topAppBar}>
-        <Text style={styles.brandTitle}>أبو الدهب - المواد الاستهلاكية</Text>
+        <Text style={styles.brandTitle}>أبو الدهب - الخردوات والمنظفات والورقيات</Text>
       </View>
 
       <FlatList
@@ -274,13 +314,13 @@ export default function ShopExploreScreen() {
             {loading && (
               <View style={styles.centerContainer}>
                 <ActivityIndicator size="large" color="#2D3C1F" />
-                <Text style={styles.loadingText}>جاري تحميل المواد الاستهلاكية...</Text>
+                <Text style={styles.loadingText}>جاري تحميل الخردوات والمنظفات والورقيات...</Text>
               </View>
             )}
             {!loading && products.length === 0 && (
               <View style={styles.centerContainer}>
                 <MaterialIcons name="inventory-2" size={48} color="#75786E" />
-                <Text style={styles.emptyText}>لا توجد مواد استهلاكية في هذه الفئة حالياً</Text>
+                <Text style={styles.emptyText}>لا توجد خردوات أو منظفات أو ورقيات في هذه الفئة حالياً</Text>
               </View>
             )}
           </>
@@ -291,6 +331,7 @@ export default function ShopExploreScreen() {
           const isFav = favoriteIds.includes(itemId);
           const cartItem = cartItems.find((i) => Number(i.product_id || i.id) === itemId);
           const qtyInCart = cartItem?.quantity || 0;
+          const hasOffer = Boolean(item.active_offer);
 
           return (
             <View style={[styles.productCard, { width: '48%', marginBottom: 0 }]}>
@@ -306,6 +347,22 @@ export default function ShopExploreScreen() {
                     color={isFav ? "#BA1A1A" : "#75786E"}
                   />
                 </TouchableOpacity>
+
+                {item.max_app_order_quantity ? (
+                  <View style={styles.limitBadge}>
+                    <Text style={styles.limitBadgeText} numberOfLines={1}>
+                      حد: {item.max_app_order_quantity} قطعة
+                    </Text>
+                  </View>
+                ) : null}
+
+                {hasOffer ? (
+                  <View style={styles.offerDiscountBadge}>
+                    <Text style={styles.offerDiscountText}>
+                      -{item.active_offer?.discount_percentage}%
+                    </Text>
+                  </View>
+                ) : null}
 
                 {item.unit ? (
                   <View style={styles.unitBadge}>
@@ -323,11 +380,23 @@ export default function ShopExploreScreen() {
                 />
               </View>
 
-              <Text style={styles.subCategory}>{item.category_name || "مواد استهلاكية"}</Text>
+              <Text style={styles.subCategory}>{item.category_name || "خردوات ومنظفات وورقيات"}</Text>
               <Text style={styles.productName} numberOfLines={2}>
                 {item.name}
               </Text>
-              <Text style={styles.productPrice}>{(Number(item.price) || 0).toFixed(2)} ج.م</Text>
+
+              {hasOffer ? (
+                <View style={styles.priceRow}>
+                  <Text style={styles.productPrice}>
+                    {(Number(item.active_offer?.offer_price) || 0).toFixed(2)} ج.م
+                  </Text>
+                  <Text style={styles.oldPriceText}>
+                    {(Number(item.active_offer?.original_price) || Number(item.price)).toFixed(2)} ج.م
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.productPrice}>{(Number(item.price) || 0).toFixed(2)} ج.م</Text>
+              )}
 
               {/* Add to Cart Button or Stepper Controls */}
               {qtyInCart === 0 ? (
@@ -509,6 +578,50 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 2,
     marginBottom: 6,
+  },
+  priceRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'baseline',
+    gap: 6,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  oldPriceText: {
+    fontSize: 11,
+    color: '#9A978F',
+    textDecorationLine: 'line-through',
+  },
+  limitBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    zIndex: 10,
+  },
+  limitBadgeText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#92400E',
+  },
+  offerDiscountBadge: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: '#BA1A1A',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    zIndex: 10,
+  },
+  offerDiscountText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   addButton: {
     backgroundColor: '#2D3C1F',

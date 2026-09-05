@@ -119,7 +119,7 @@ export default function ProfileScreen() {
             <Text style={styles.authSub}>
               سجل الدخول حتى تتمكن من متابعة طلباتك وحفظ عنوانك.
             </Text>
-            <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
+            <TouchableOpacity style={styles.loginBtn} onPress={() => router.push({ pathname: '/login', params: { manual: '1' } })}>
               <Text style={styles.loginBtnText}>تسجيل الدخول / حساب جديد</Text>
             </TouchableOpacity>
           </View>
@@ -229,21 +229,21 @@ export default function ProfileScreen() {
                 </Text>
 
                 {/* Phone 1 */}
-                {(appSettings?.phone1 || '01000000000') && (
+                {Boolean(appSettings?.phone1) && (
                   <View style={styles.supportNumberCard}>
                     <Text style={styles.supportPhoneLabel}>الخط الرئيسي (1)</Text>
-                    <Text style={styles.supportPhoneVal}>{appSettings?.phone1 || '01000000000'}</Text>
+                    <Text style={styles.supportPhoneVal}>{appSettings?.phone1}</Text>
                     <View style={styles.supportActionsRow}>
                       <TouchableOpacity
                         style={styles.callBtn}
-                        onPress={() => handleCall(appSettings?.phone1 || '01000000000')}
+                        onPress={() => handleCall(appSettings?.phone1)}
                       >
                         <MaterialIcons name="phone" size={16} color="#FFFFFF" />
                         <Text style={styles.callBtnText}>اتصال</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.waBtn}
-                        onPress={() => handleWhatsApp(appSettings?.phone1 || '01000000000')}
+                        onPress={() => handleWhatsApp(appSettings?.phone1)}
                       >
                         <MaterialIcons name="chat" size={16} color="#FFFFFF" />
                         <Text style={styles.waBtnText}>واتساب</Text>

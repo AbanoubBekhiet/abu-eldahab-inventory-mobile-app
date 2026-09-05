@@ -177,6 +177,9 @@ export default function AdminCustomersScreen() {
         name: customer.name,
         phone: customer.phone || '',
         balance: String(customer.balance || 0),
+        address: customer.address || '',
+        latitude: customer.latitude ? String(customer.latitude) : '',
+        longitude: customer.longitude ? String(customer.longitude) : '',
       },
     } as any);
   };

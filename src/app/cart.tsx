@@ -20,6 +20,7 @@ import {
   clearCart,
   placeCustomerOrder,
   CartItem,
+  fetchUserProfile,
 } from '../services/api';
 import { AppImage } from '../components/app-image';
 import { useRoleGuard } from '../hooks/useRoleGuard';
@@ -53,6 +54,17 @@ export default function CartScreen() {
   const totalItemsCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
 
   const handleUpdateQuantity = async (id: number, delta: number) => {
+    const item = cartItems.find((i) => Number(i.product_id || i.id) === id);
+    if (delta > 0 && item && item.max_app_order_quantity) {
+      const maxLimitNum = Number(item.max_app_order_quantity);
+      if (maxLimitNum > 0 && item.quantity >= maxLimitNum) {
+        Alert.alert(
+          'حد الكمية المسموحة',
+          `عذراً، أقصى كمية مسموح بشرائها لهذا المنتج هي ${maxLimitNum} قطعة فقط.`
+        );
+        return;
+      }
+    }
     const updated = await updateCartItemQty(id, delta);
     setCartItems(updated);
   };
@@ -66,18 +78,37 @@ export default function CartScreen() {
     if (cartItems.length === 0) return;
     setSubmitting(true);
     try {
+      // Validate region limits
+      try {
+        const user = await fetchUserProfile();
+        if (user && user.region) {
+          if (user.region.min_order_total > 0 && subtotal < user.region.min_order_total) {
+            Alert.alert('الحد الأدنى للطلب', `الحد الأدنى لقيمة الطلب لمنطقتك هو ${user.region.min_order_total} ج.م`);
+            setSubmitting(false);
+            return;
+          }
+          if (user.region.min_products_count > 0 && cartItems.length < user.region.min_products_count) {
+            Alert.alert('الحد الأدنى للمنتجات', `الحد الأدنى لعدد المنتجات لمنطقتك هو ${user.region.min_products_count} صنف`);
+            setSubmitting(false);
+            return;
+          }
+        }
+      } catch (err) {
+        // Continue if profile fetch fails
+      }
+
       const itemsPayload = cartItems.map((i) => ({
         product_id: i.product_id || i.id,
         quantity: i.quantity,
         unit_price: Number(i.price) || 0,
       }));
 
-      await placeCustomerOrder(itemsPayload, notes || 'طلب مواد استهلاكية عبر التطبيق');
+      await placeCustomerOrder(itemsPayload, notes || 'طلب خردوات ومنظفات وورقيات عبر التطبيق');
       await clearCart();
       setCartItems([]);
       setOrderSuccess(true);
-    } catch (e) {
-      Alert.alert('خطأ', 'حدث خطأ أثناء تنفيذ الطلب. يرجى المحاولة لاحقاً.');
+    } catch (e: any) {
+      Alert.alert('خطأ', e.message || 'حدث خطأ أثناء تنفيذ الطلب. يرجى المحاولة لاحقاً.');
     } finally {
       setSubmitting(false);
     }
@@ -109,7 +140,7 @@ export default function CartScreen() {
             <MaterialIcons name="check-circle" size={54} color="#2D3C1F" />
             <Text style={styles.successTitle}>تم إرسال طلبك بنجاح!</Text>
             <Text style={styles.successSub}>
-              سيقوم فريق العمل بتجهيز طلب المواد الاستهلاكية والتواصل معك فوراً للتسليم.
+              سيقوم فريق العمل بتجهيز طلبك والتواصل معك فوراً للتسليم.
             </Text>
             <TouchableOpacity style={styles.homeBtn} onPress={() => router.push('/')}>
               <Text style={styles.homeBtnText}>العودة للرئيسية</Text>
@@ -120,7 +151,7 @@ export default function CartScreen() {
             <MaterialIcons name="shopping-cart" size={54} color="#75786E" />
             <Text style={styles.emptyTitle}>سلة التسوق فارغة حالياً</Text>
             <Text style={styles.emptySub}>
-              تصفح المواد الاستهلاكية والغذائية في المتجر وأضف مشترياتك للسلة.
+              تصفح الخردوات والمنظفات والورقيات في المتجر وأضف مشترياتك للسلة.
             </Text>
             <TouchableOpacity style={styles.homeBtn} onPress={() => router.push('/')}>
               <Text style={styles.homeBtnText}>تصفح المنتجات الآن</Text>
@@ -162,7 +193,7 @@ export default function CartScreen() {
                   <View style={styles.cardRightCol}>
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.name}</Text>
-                      <Text style={styles.itemVariant}>{item.category_name || 'مواد استهلاكية'}</Text>
+                      <Text style={styles.itemVariant}>{item.category_name || 'خردوات ومنظفات وورقيات'}</Text>
                     </View>
 
                     <AppImage

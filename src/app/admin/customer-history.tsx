@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -27,7 +28,7 @@ import MobileFooterNav from '../../components/mobile-footer';
 export default function AdminCustomerHistoryScreen() {
   useRoleGuard('admin');
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; name?: string; phone?: string; balance?: string }>();
+  const params = useLocalSearchParams<{ id?: string; name?: string; phone?: string; balance?: string; address?: string; latitude?: string; longitude?: string }>();
 
   const customerId = params.id;
 
@@ -36,6 +37,9 @@ export default function AdminCustomerHistoryScreen() {
     name: params.name || 'عميل',
     phone: params.phone || '—',
     balance: Number(params.balance || 0),
+    address: params.address || '—',
+    latitude: params.latitude ? Number(params.latitude) : null,
+    longitude: params.longitude ? Number(params.longitude) : null,
   });
 
   const [transactions, setTransactions] = useState<CustomerTransactionItem[]>([]);
@@ -214,6 +218,31 @@ export default function AdminCustomerHistoryScreen() {
                         )}
                         {customer.shop_name && customer.shop_name !== '—' && (
                           <Text style={styles.customerSub}>محل: {customer.shop_name}</Text>
+                        )}
+                        {customer.address && customer.address !== '—' && (
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}
+                            onPress={() => {
+                              if (customer.latitude && customer.longitude) {
+                                const url = `https://www.google.com/maps/search/?api=1&query=${customer.latitude},${customer.longitude}`;
+                                Linking.openURL(url).catch(() => {
+                                  Alert.alert('خطأ', 'لا يمكن فتح خرائط جوجل.');
+                                });
+                              } else {
+                                Alert.alert('تنبيه', 'لا يتوفر الموقع الجغرافي (GPS) لهذا العميل.');
+                              }
+                            }}
+                          >
+                            <Text style={[styles.customerSub, { color: (customer.latitude && customer.longitude) ? '#0066CC' : '#75786E', textDecorationLine: (customer.latitude && customer.longitude) ? 'underline' : 'none' }]}>
+                              العنوان: {customer.address}
+                            </Text>
+                            <MaterialIcons
+                              name="location-on"
+                              size={14}
+                              color={(customer.latitude && customer.longitude) ? "#0066CC" : "#75786E"}
+                              style={{ marginLeft: 4 }}
+                            />
+                          </TouchableOpacity>
                         )}
                       </View>
 
