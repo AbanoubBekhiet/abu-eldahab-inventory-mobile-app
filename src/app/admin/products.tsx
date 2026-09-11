@@ -12,6 +12,7 @@ import {
   Switch,
   ActivityIndicator,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -65,6 +66,13 @@ export default function AdminProductsScreen() {
 
   useEffect(() => {
     loadProducts(1);
+  }, [search, selectedFilter]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadProducts(1);
+    setRefreshing(false);
   }, [search, selectedFilter]);
 
   const loadProducts = async (pageToLoad: number = 1) => {
@@ -274,12 +282,15 @@ export default function AdminProductsScreen() {
         </ScrollView>
 
         {/* Products FlatList with Infinite Scrolling */}
-        {loading ? (
+        {loading && !refreshing ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#2D3C1F" />
           </View>
         ) : (
           <FlatList
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2D3C1F"]} />
+            }
             data={products}
             renderItem={renderProductItem}
             keyExtractor={(item) => String(item.id)}

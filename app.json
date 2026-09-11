@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "abu-eldahab-mobile",
-    "slug": "abu-eldahab-mobile",
+    "name": "ابو الدهب - abu-eldahab",
+    "slug": "abu-eldahab",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -18,7 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.abueldahabmobile"
+      "package": "sbs.abueldahab.abueldahab"
     },
     "web": {
       "output": "static",
@@ -33,10 +33,19 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6a0d8e30-24d0-4f73-9b26-7aeba9ba3836"
+      }
+    },
+    "owner": "abanoubbekhiets-team"
   }
 }

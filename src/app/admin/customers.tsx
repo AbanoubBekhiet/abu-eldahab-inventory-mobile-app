@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -104,6 +105,13 @@ export default function AdminCustomersScreen() {
 
   useEffect(() => {
     loadCustomers(1);
+  }, [search]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadCustomers(1);
+    setRefreshing(false);
   }, [search]);
 
   const loadCustomers = async (pageToLoad: number = 1) => {
@@ -310,13 +318,16 @@ export default function AdminCustomersScreen() {
           />
         </View>
 
-        {/* Customers List */}
-        {loading ? (
+        {/* Customers FlatList */}
+        {loading && !refreshing ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#2D3C1F" />
           </View>
         ) : (
           <FlatList
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2D3C1F"]} />
+            }
             data={customers}
             renderItem={renderCustomerItem}
             keyExtractor={(item) => String(item.id)}

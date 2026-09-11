@@ -9,6 +9,7 @@ import {
   Linking,
   Modal,
   Pressable,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -64,6 +65,19 @@ export default function ProfileScreen() {
     }, [])
   );
 
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const data = await fetchUserAccount();
+      setAccountData(data);
+    } catch {
+      setAccountData(null);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   const handleLogout = async () => {
     await logoutCustomer();
     setAccountData(null);
@@ -107,7 +121,13 @@ export default function ProfileScreen() {
         <Text style={styles.brandTitle}>أبو الدهب - حسابي</Text>
       </View>
 
-      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2D3C1F"]} />
+        }
+      >
         {loading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#2D3C1F" />

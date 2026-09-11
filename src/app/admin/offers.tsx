@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -52,7 +53,7 @@ export default function AdminOffersScreen() {
     setLoading(true);
     try {
       const res = await fetchAllOffers();
-      setOffers(Array.isArray(res) ? res : []);
+      setOffers(res.offers || []);
     } catch (e) {
       setOffers([]);
     } finally {
@@ -62,6 +63,13 @@ export default function AdminOffersScreen() {
 
   useEffect(() => {
     loadOffers();
+  }, [loadOffers]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadOffers();
+    setRefreshing(false);
   }, [loadOffers]);
 
   const loadProductsForModal = async (search: string = '') => {
@@ -119,7 +127,8 @@ export default function AdminOffersScreen() {
       const days = parseInt(durationDays, 10) || 1;
       const d = new Date();
       d.setDate(d.getDate() + days);
-      expiryDateStr = d.toISOString().slice(0, 19).replace('T', ' ');
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      expiryDateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     }
 
     const payload = {
@@ -166,8 +175,8 @@ export default function AdminOffersScreen() {
   };
 
   const filteredOffers = offers.filter((o) => {
-    if (filterTab === 'active') return o.is_active;
-    if (filterTab === 'expired') return !o.is_active;
+    if (filterTab === 'active') return o.is_currently_active;
+    if (filterTab === 'expired') return !o.is_currently_active;
     return true;
   });
 
@@ -192,7 +201,7 @@ export default function AdminOffersScreen() {
             onPress={() => setFilterTab('active')}
           >
             <Text style={[styles.tabText, filterTab === 'active' && styles.tabTextActive]}>
-              العروض النشطة ({offers.filter((o) => o.is_active).length})
+              العروض النشطة ({offers.filter((o) => o.is_currently_active).length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -200,7 +209,7 @@ export default function AdminOffersScreen() {
             onPress={() => setFilterTab('expired')}
           >
             <Text style={[styles.tabText, filterTab === 'expired' && styles.tabTextActive]}>
-              المنتهية/الملغاة ({offers.filter((o) => !o.is_active).length})
+              المنتهية/الملغاة ({offers.filter((o) => !o.is_currently_active).length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -213,12 +222,15 @@ export default function AdminOffersScreen() {
           </TouchableOpacity>
         </View>
 
-        {loading ? (
+        {loading && !refreshing ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#2D3C1F" />
           </View>
         ) : (
           <FlatList
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2D3C1F"]} />
+            }
             data={filteredOffers}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.listContainer}
@@ -252,16 +264,16 @@ export default function AdminOffersScreen() {
                     <View
                       style={[
                         styles.statusPill,
-                        item.is_active ? styles.statusActive : styles.statusExpired,
+                        item.is_currently_active ? styles.statusActive : styles.statusExpired,
                       ]}
                     >
                       <Text
                         style={[
                           styles.statusText,
-                          item.is_active ? styles.statusTextActive : styles.statusTextExpired,
+                          item.is_currently_active ? styles.statusTextActive : styles.statusTextExpired,
                         ]}
                       >
-                        {item.is_active ? 'نشط' : 'منتهي'}
+                        {item.is_currently_active ? 'نشط' : 'منتهي'}
                       </Text>
                     </View>
                   </View>
@@ -290,8 +302,19 @@ export default function AdminOffersScreen() {
                   </View>
 
                   <View style={styles.cardFooter}>
-                    <Text style={styles.expiryText}>تاريخ الانتهاء: {item.expires_at}</Text>
-                    {item.is_active && (
+                    <Text style={styles.expiryText}>تاريخ الانتهاء: {(() => {
+                      if (!item.expires_at) return '—';
+                      try {
+                        const d = new Date(item.expires_at.replace(' ', 'T'));
+                        if (isNaN(d.getTime())) return item.expires_at;
+                        const pad = (n: number) => n.toString().padStart(2, '0');
+                        let h = d.getHours();
+                        const ampm = h >= 12 ? 'م' : 'ص';
+                        h = h % 12 || 12;
+                        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(h)}:${pad(d.getMinutes())} ${ampm}`;
+                      } catch { return item.expires_at; }
+                    })()}</Text>
+                    {item.is_currently_active && (
                       <TouchableOpacity
                         style={styles.deleteBtn}
                         onPress={() => handleDeleteOffer(item)}

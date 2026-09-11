@@ -8,6 +8,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -113,6 +114,33 @@ export default function ShopExploreScreen() {
   // Whenever selectedCategory changes, reload products
   React.useEffect(() => {
     loadShopProducts(selectedCategory);
+  }, [selectedCategory, loadShopProducts]);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        loadShopProducts(selectedCategory),
+        (async () => {
+          const [user, cats, favs, cart] = await Promise.all([
+            fetchUserProfile(),
+            fetchCategories(),
+            getFavoriteIds(),
+            getCartItems(),
+          ]);
+          if (user) setUserProfile(user);
+          setCategories(Array.isArray(cats) ? cats : []);
+          setFavoriteIds(Array.isArray(favs) ? [...favs.map(Number)] : []);
+          setCartItems(Array.isArray(cart) ? [...cart] : []);
+        })()
+      ]);
+    } catch (e) {
+      console.log("Refresh error", e);
+    } finally {
+      setRefreshing(false);
+    }
   }, [selectedCategory, loadShopProducts]);
 
   const handleToggleFavorite = async (productId: number | string) => {
@@ -255,6 +283,9 @@ export default function ShopExploreScreen() {
       </View>
 
       <FlatList
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2E5A44"]} />
+        }
         data={loading ? [] : products}
         keyExtractor={(item) => String(item.id)}
         numColumns={2}

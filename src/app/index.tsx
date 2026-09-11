@@ -11,6 +11,7 @@ import {
 	ActivityIndicator,
 	Image,
 	Dimensions,
+	RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -102,6 +103,34 @@ export default function MobileHomeScreen() {
 
 	const [nextPage, setNextPage] = useState<number | null>(null);
 	const [loadingMore, setLoadingMore] = useState(false);
+	const [refreshing, setRefreshing] = useState(false);
+
+	const onRefresh = useCallback(async () => {
+		setRefreshing(true);
+		try {
+			await Promise.all([
+				loadProducts(true),
+				(async () => {
+					const [user, cats, favs, cart, offers] = await Promise.all([
+						fetchUserProfile(),
+						fetchCategories(),
+						getFavoriteIds(),
+						getCartItems(),
+						fetchActiveOffers(),
+					]);
+					if (user) setUserProfile(user);
+					setCategories(Array.isArray(cats) ? cats : []);
+					setFavoriteIds(Array.isArray(favs) ? [...favs.map(Number)] : []);
+					setCartItems(Array.isArray(cart) ? [...cart] : []);
+					setActiveOffers(Array.isArray(offers) ? offers : []);
+				})()
+			]);
+		} catch (e) {
+			console.log("Refresh error", e);
+		} finally {
+			setRefreshing(false);
+		}
+	}, [search, selectedCategory]);
 
 	useEffect(() => {
 		loadProducts(true);
@@ -262,6 +291,9 @@ export default function MobileHomeScreen() {
 	return (
 		<SafeAreaView style={styles.container}>
 			<FlatList
+				refreshControl={
+					<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2E5A44"]} />
+				}
 				data={loading ? [] : products}
 				keyExtractor={(item) => String(item.id)}
 				numColumns={2}

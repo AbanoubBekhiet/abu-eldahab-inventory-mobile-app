@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearFcmToken } from './fcm';
 
 function getApiBaseUrl(): string {
+  // If you need to test locally, uncomment the code below:
+  /*
   try {
     const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost || '';
     if (hostUri) {
@@ -13,6 +15,10 @@ function getApiBaseUrl(): string {
     }
   } catch (e) {}
   return 'http://192.168.100.10:8000/api';
+  */
+  
+  // Production URL
+  return 'https://abu-eldahab.sbs/api';
 }
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -981,8 +987,9 @@ export async function fetchAppSettings(): Promise<AppSettingsData | null> {
 
 // ── Settings Logo URL ──
 
+const logoCacheBuster = Date.now();
 export function getSettingsLogoUrl(): string {
-  return `${API_BASE_URL}/settings-logo`;
+  return `${API_BASE_URL}/settings-logo?t=${logoCacheBuster}`;
 }
 
 // ── Offers System ──

@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -54,6 +55,13 @@ export default function AdminDashboardScreen() {
 
   useEffect(() => {
     loadOrders(1);
+  }, []);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadOrders(1);
+    setRefreshing(false);
   }, []);
 
   const loadOrders = async (pageToLoad: number = 1) => {
@@ -263,12 +271,15 @@ export default function AdminDashboardScreen() {
         </ScrollView>
 
         {/* Orders FlatList with Infinite Scrolling */}
-        {loading ? (
+        {loading && !refreshing ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#2D3C1F" />
           </View>
         ) : (
           <FlatList
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2D3C1F"]} />
+            }
             data={filterOrders}
             renderItem={renderOrderItem}
             keyExtractor={(item) => String(item.id)}

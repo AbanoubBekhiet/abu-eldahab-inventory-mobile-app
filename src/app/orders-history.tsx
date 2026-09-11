@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { AppImage } from '../components/app-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -69,6 +70,13 @@ export default function OrdersHistoryScreen() {
     loadOrders(true);
   }, [loadOrders]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadOrders(true);
+    setRefreshing(false);
+  }, [loadOrders]);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Top App Header with Back button */}
@@ -81,6 +89,9 @@ export default function OrdersHistoryScreen() {
       </View>
 
       <FlatList
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2D3C1F"]} />
+        }
         data={loading ? [] : orders}
         keyExtractor={(item, index) => String(item.raw_id || item.id || index)}
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 }}
