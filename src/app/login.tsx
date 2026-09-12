@@ -27,7 +27,7 @@ import {
   Region,
   getSettingsLogoUrl,
 } from '../services/api';
-import { getOrGenerateFcmToken } from '../services/fcm';
+import { registerForPushNotificationsAsync } from '../services/fcm';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -139,7 +139,7 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const fcmToken = await getOrGenerateFcmToken();
+      const fcmToken = await registerForPushNotificationsAsync();
       let res;
       if (isRegister) {
         if (!regionId) {
@@ -195,7 +195,7 @@ export default function LoginScreen() {
           <View style={styles.headerBox}>
             <View style={styles.logoCircle}>
               <Image
-                source={{ uri: getSettingsLogoUrl() }}
+                source={require('../../assets/images/logo.png')}
                 style={styles.logoImage}
                 resizeMode="contain"
               />

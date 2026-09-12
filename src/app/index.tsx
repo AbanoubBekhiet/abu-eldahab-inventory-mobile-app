@@ -307,14 +307,14 @@ export default function MobileHomeScreen() {
 						<View style={styles.greetingHeader}>
 							<View style={styles.userAvatarBadge}>
 								<Image
-									source={{ uri: logoUrl }}
+									source={require('../../assets/images/logo.jpeg')}
 									style={{ width: 40, height: 40, borderRadius: 20 }}
 									resizeMode="contain"
 								/>
 							</View>
 							<View style={styles.greetingTexts}>
 								<Text style={styles.greetingTitle}>
-									{userProfile?.name ? `صباح الخير، ${userProfile.name}` : "مرحباً بك في تطبيق أبو الدهب"}
+									{userProfile?.name ? `أهلاً بك ${userProfile.name}` : "مرحباً بك في تطبيق أبو الدهب"}
 								</Text>
 								<Text style={styles.greetingSub}>
 									{userProfile?.shop_name || "جاهز لتسوق الخردوات والمنظفات والورقيات اليوم؟"}
@@ -421,17 +421,13 @@ export default function MobileHomeScreen() {
 						</View>
 
 						<View style={styles.categoriesWrapper}>
-							<ScrollView
-								horizontal
-								showsHorizontalScrollIndicator={false}
-								contentContainerStyle={styles.categoriesContainer}
-							>
+							<View style={styles.categoriesContainer}>
 								<TouchableOpacity
 									style={[
 										styles.categoryItem,
 										selectedCategory === "all" && styles.categoryItemActive,
 									]}
-									onPress={() => setSelectedCategory("all")}
+									onPress={() => router.push({ pathname: '/explore', params: { categoryId: 'all' } })}
 								>
 									<View style={styles.categoryIconCircle}>
 										<MaterialIcons name="shopping-basket" size={24} color="#2D3C1F" />
@@ -446,18 +442,18 @@ export default function MobileHomeScreen() {
 											styles.categoryItem,
 											selectedCategory === cat.id && styles.categoryItemActive,
 										]}
-										onPress={() => setSelectedCategory(cat.id)}
+										onPress={() => router.push({ pathname: '/explore', params: { categoryId: cat.id } })}
 									>
 										<AppImage
 											uri={cat.image_url}
 											style={styles.categoryIconCircle}
 											iconName="shopping-basket"
-											iconSize={24}
+											iconSize={40}
 										/>
 										<Text style={styles.categoryItemLabel} numberOfLines={1}>{cat.name}</Text>
 									</TouchableOpacity>
 								))}
-							</ScrollView>
+							</View>
 						</View>
 
 						{/* Products Section Header */}
@@ -710,16 +706,19 @@ const styles = StyleSheet.create({
 	categoriesContainer: {
 		paddingHorizontal: 20,
 		gap: 16,
+		flexDirection: "row-reverse",
+		flexWrap: "wrap",
+		justifyContent: "space-between",
 	},
 	categoryItem: {
 		alignItems: "center",
-		width: 70,
+		width: "46%",
 	},
 	categoryItemActive: {},
 	categoryIconCircle: {
-		width: 56,
-		height: 56,
-		borderRadius: 28,
+		width: 90,
+		height: 90,
+		borderRadius: 45,
 		backgroundColor: "#FBF2E5",
 		borderWidth: 1,
 		borderColor: "#EAE1D5",

@@ -187,113 +187,131 @@ export interface UserAccountData {
 }
 
 // Cart Storage Management
-const CART_STORAGE_KEY = 'user_shopping_cart_v1';
-
+// We now use Backend API for cart management.
 export async function getCartItems(): Promise<CartItem[]> {
   try {
-    const raw = await AsyncStorage.getItem(CART_STORAGE_KEY);
-    if (!raw) return [];
-    const items = JSON.parse(raw);
-    return Array.isArray(items)
-      ? items.map((i) => ({
-          ...i,
-          id: Number(i.id || i.product_id),
-          product_id: Number(i.product_id || i.id),
-          price: Number(i.price) || 0,
-          quantity: Number(i.quantity) || 1,
-        }))
-      : [];
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return [];
+    
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/cart`, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.cart_items || [];
   } catch (e) {
     return [];
   }
 }
 
 export async function saveCartItems(items: CartItem[]): Promise<void> {
-  try {
-    await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-  } catch (e) {}
+  // Deprecated: Managed by backend
 }
 
 export async function addProductToCart(product: Product, quantity = 1): Promise<CartItem[]> {
-  const current = await getCartItems();
-  const pId = Number(product.id);
-  const existingIndex = current.findIndex((item) => Number(item.product_id || item.id) === pId);
-
-  if (existingIndex > -1) {
-    const existing = current[existingIndex];
-    let newQty = existing.quantity + quantity;
-    const maxLimit = existing.max_app_order_quantity;
-    const maxLimitNum = Number(maxLimit);
-    if (maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
-      if (newQty > maxLimitNum) {
-        newQty = maxLimitNum;
-      }
+  try {
+    if (!authToken) {
+      alert('يرجى تسجيل الدخول أولاً لإضافة منتجات للسلة');
+      return [];
     }
-    current[existingIndex] = { ...existing, quantity: newQty };
-  } else {
-    current.push({
-      id: pId,
-      product_id: pId,
-      name: product.name,
-      price: Number(product.price) || 0,
-      quantity,
-      image_url: product.image_url,
-      category_name: product.category_name,
-      max_app_order_quantity: product.max_app_order_quantity,
-    });
-  }
+    
+    const headers: Record<string, string> = { 
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
 
-  await saveCartItems(current);
-  return current;
+    const res = await fetch(`${API_BASE_URL}/cart`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ product_id: product.id, quantity })
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.message || 'Error adding to cart');
+    }
+    const data = await res.json();
+    return data.cart_items || [];
+  } catch (e: any) {
+    alert(e.message || 'حدث خطأ أثناء الإضافة للسلة');
+    return await getCartItems();
+  }
 }
 
 export async function updateCartItemQty(productId: number | string, delta: number): Promise<CartItem[]> {
-  const current = await getCartItems();
-  const pId = Number(productId);
-  const updated = current
-    .map((item) => {
-      if (Number(item.product_id || item.id) === pId) {
-        let newQty = item.quantity + delta;
-        const maxLimit = item.max_app_order_quantity;
-        const maxLimitNum = Number(maxLimit);
-        if (delta > 0 && maxLimit !== null && maxLimit !== undefined && !isNaN(maxLimitNum) && maxLimitNum > 0) {
-          if (newQty > maxLimitNum) {
-            newQty = maxLimitNum;
-          }
-        }
-        return newQty > 0 ? { ...item, quantity: newQty } : null;
-      }
-      return item;
-    })
-    .filter(Boolean) as CartItem[];
+  try {
+    if (!authToken) return await getCartItems();
+    
+    const headers: Record<string, string> = { 
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
 
-  await saveCartItems(updated);
-  return updated;
+    const res = await fetch(`${API_BASE_URL}/cart/${productId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ delta })
+    });
+    if (!res.ok) return await getCartItems();
+    const data = await res.json();
+    return data.cart_items || [];
+  } catch (e) {
+    return await getCartItems();
+  }
 }
 
 export async function removeCartItem(productId: number | string): Promise<CartItem[]> {
-  const current = await getCartItems();
-  const pId = Number(productId);
-  const updated = current.filter((item) => Number(item.product_id || item.id) !== pId);
-  await saveCartItems(updated);
-  return updated;
+  try {
+    if (!authToken) return await getCartItems();
+    
+    const headers: Record<string, string> = { 
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
+
+    const res = await fetch(`${API_BASE_URL}/cart/${productId}`, {
+      method: 'DELETE',
+      headers
+    });
+    if (!res.ok) return await getCartItems();
+    const data = await res.json();
+    return data.cart_items || [];
+  } catch (e) {
+    return await getCartItems();
+  }
 }
 
 export async function clearCart(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(CART_STORAGE_KEY);
+    if (!authToken) return;
+    
+    const headers: Record<string, string> = { 
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
+
+    await fetch(`${API_BASE_URL}/cart/clear`, {
+      method: 'DELETE',
+      headers
+    });
   } catch (e) {}
 }
 
-// Favorites Management via AsyncStorage
-const FAVORITES_STORAGE_KEY = 'user_favorite_products_v1';
-
+// Favorites Management via Backend API
 export async function getFavoriteIds(): Promise<number[]> {
   try {
-    const raw = await AsyncStorage.getItem(FAVORITES_STORAGE_KEY);
-    if (!raw) return [];
-    const ids = JSON.parse(raw);
-    return Array.isArray(ids) ? ids.map((id) => Number(id)).filter((id) => !isNaN(id)) : [];
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return [];
+    
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/wishlist`, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.favorite_ids || [];
   } catch (e) {
     return [];
   }
@@ -301,20 +319,28 @@ export async function getFavoriteIds(): Promise<number[]> {
 
 export async function toggleFavoriteId(productId: number | string): Promise<number[]> {
   try {
-    const pId = Number(productId);
-    if (isNaN(pId)) return await getFavoriteIds();
-
-    const current = await getFavoriteIds();
-    let updated: number[];
-    if (current.includes(pId)) {
-      updated = current.filter((id) => id !== pId);
-    } else {
-      updated = [...current, pId];
+    if (!authToken) {
+      alert('يرجى تسجيل الدخول أولاً لإضافة منتجات للمفضلة');
+      return [];
     }
-    await AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
-    return updated;
-  } catch (e) {
-    return [];
+    
+    const headers: Record<string, string> = { 
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
+
+    const res = await fetch(`${API_BASE_URL}/wishlist/toggle`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ product_id: productId })
+    });
+    if (!res.ok) return await getFavoriteIds();
+    const data = await res.json();
+    return data.favorite_ids || [];
+  } catch (e: any) {
+    alert(e.message || 'حدث خطأ أثناء الإضافة للمفضلة');
+    return await getFavoriteIds();
   }
 }
 

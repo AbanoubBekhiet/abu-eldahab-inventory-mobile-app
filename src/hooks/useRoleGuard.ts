@@ -27,7 +27,7 @@ export function useRoleGuard(requiredRole: 'admin' | 'customer') {
             router.replace('/');
             return;
           }
-        } else if (requiredRole === 'admin') {
+        } else {
           router.replace('/login');
           return;
         }

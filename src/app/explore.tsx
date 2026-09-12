@@ -11,8 +11,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import MobileFooterNav from '../components/mobile-footer';
 import {
@@ -38,7 +37,17 @@ export default function ShopExploreScreen() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const params = useLocalSearchParams();
   const [selectedCategory, setSelectedCategory] = useState<string | number>('all');
+
+  // Watch for categoryId param changes
+  React.useEffect(() => {
+    if (params.categoryId) {
+      setSelectedCategory(
+        params.categoryId === 'all' ? 'all' : Number(params.categoryId)
+      );
+    }
+  }, [params.categoryId]);
   const [loading, setLoading] = useState(true);
 
   // User profile (for admin limit bypass)

@@ -49,18 +49,10 @@ export async function syncFcmTokenWithServer(fcmToken: string): Promise<void> {
     const authToken = await AsyncStorage.getItem('auth_token');
     if (!authToken) return;
 
-    let baseUrl = 'http://192.168.100.10:8000/api';
-    try {
-      const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost || '';
-      if (hostUri) {
-        const ip = hostUri.split(':')[0];
-        if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
-          baseUrl = `http://${ip}:8000/api`;
-        }
-      }
-    } catch (e) {}
+    // Use the same production API URL as the rest of the app
+    const { API_BASE_URL } = require('./api');
 
-    await fetch(`${baseUrl}/auth/fcm-token`, {
+    await fetch(`${API_BASE_URL}/auth/fcm-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -114,7 +106,11 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
       return fallbackToken;
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync().catch(() => null);
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId }).catch((e) => {
+      console.error('getExpoPushTokenAsync failed:', e);
+      return null;
+    });
     const pushToken = tokenData?.data;
 
     if (pushToken) {

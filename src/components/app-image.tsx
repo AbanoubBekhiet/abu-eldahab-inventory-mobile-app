@@ -9,9 +9,7 @@ interface AppImageProps {
   iconName?: keyof typeof MaterialIcons.glyphMap;
 }
 
-import { API_BASE_URL } from '../services/api';
-
-const SESSION_TS = Date.now();
+const defaultLogo = require('../../assets/images/logo.jpeg');
 
 export function AppImage({
   uri,
@@ -20,29 +18,15 @@ export function AppImage({
   iconName = 'eco',
 }: AppImageProps) {
   const [error, setError] = useState(false);
-  const [fallbackError, setFallbackError] = useState(false);
 
-  const fallbackUri = `${API_BASE_URL}/settings-logo?v=${SESSION_TS}`;
-  const imageUri = uri && !error ? uri : fallbackUri;
-
-  if (fallbackError) {
-    return (
-      <View style={[styles.fallbackContainer, style]}>
-        <View style={styles.badgeCircle}>
-          <MaterialIcons name={iconName} size={iconSize} color="#2D3C1F" />
-        </View>
-      </View>
-    );
-  }
+  const imageSource = uri && !error ? { uri } : defaultLogo;
 
   return (
     <Image
-      source={{ uri: imageUri }}
+      source={imageSource}
       style={style}
       onError={() => {
-        if (imageUri === fallbackUri) {
-          setFallbackError(true);
-        } else {
+        if (uri) {
           setError(true);
         }
       }}

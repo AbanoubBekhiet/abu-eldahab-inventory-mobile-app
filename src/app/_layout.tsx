@@ -1,10 +1,23 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { registerForPushNotificationsAsync, setupNotificationListeners } from '../services/fcm';
 
+// Keep the splash screen visible while we load resources
+SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
+  const onLayoutReady = useCallback(async () => {
+    // Small delay to ensure the first screen is fully rendered
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await SplashScreen.hideAsync();
+  }, []);
+
   useEffect(() => {
+    // Hide splash screen after layout is ready
+    onLayoutReady();
+
     // Register for push notifications safely on app startup
     registerForPushNotificationsAsync();
 
