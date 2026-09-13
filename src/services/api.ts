@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearFcmToken } from './fcm';
+import { Alert } from 'react-native';
 
 function getApiBaseUrl(): string {
   // If you need to test locally, uncomment the code below:
@@ -115,7 +116,6 @@ export enum OrderStatus {
   CONFIRMED = 'confirmed',
   SHIPPED = 'shipped',
   DELIVERED = 'delivered',
-  COMPLETED = 'completed',
   CANCELLED = 'cancelled',
 }
 
@@ -124,7 +124,6 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus | string, string> = {
   [OrderStatus.CONFIRMED]: 'تم التأكيد',
   [OrderStatus.SHIPPED]: 'تم الشحن',
   [OrderStatus.DELIVERED]: 'تم التوصيل',
-  [OrderStatus.COMPLETED]: 'مكتمل',
   [OrderStatus.CANCELLED]: 'ملغي',
 };
 
@@ -228,13 +227,18 @@ export async function addProductToCart(product: Product, quantity = 1): Promise<
       body: JSON.stringify({ product_id: product.id, quantity })
     });
     if (!res.ok) {
-      const data = await res.json();
+      let data: any = {};
+      try { data = await res.json(); } catch(err) {}
       throw new Error(data.message || 'Error adding to cart');
     }
     const data = await res.json();
+    if (data.success === false) {
+       throw new Error(data.message || 'Error adding to cart');
+    }
     return data.cart_items || [];
   } catch (e: any) {
-    alert(e.message || 'حدث خطأ أثناء الإضافة للسلة');
+    const msg = e?.message || 'حدث خطأ أثناء الإضافة للسلة';
+    Alert.alert('تنبيه', msg);
     return await getCartItems();
   }
 }
@@ -254,10 +258,19 @@ export async function updateCartItemQty(productId: number | string, delta: numbe
       headers,
       body: JSON.stringify({ delta })
     });
-    if (!res.ok) return await getCartItems();
+    if (!res.ok) {
+      let data: any = {};
+      try { data = await res.json(); } catch(err) {}
+      throw new Error(data.message || 'حدث خطأ أثناء تعديل السلة');
+    }
     const data = await res.json();
+    if (data.success === false) {
+       throw new Error(data.message || 'حدث خطأ أثناء تعديل السلة');
+    }
     return data.cart_items || [];
-  } catch (e) {
+  } catch (e: any) {
+    const msg = e?.message || 'حدث خطأ أثناء تعديل السلة';
+    Alert.alert('تنبيه', msg);
     return await getCartItems();
   }
 }
@@ -454,7 +467,11 @@ export async function placeCustomerOrder(items: { product_id: number; quantity: 
         notes: notes || 'طلب خردوات ومنظفات وورقيات عبر التطبيق',
       }),
     });
-    return await res.json();
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.message || 'حدث خطأ أثناء تنفيذ الطلب');
+    }
+    return data;
   } catch (error) {
     console.error('Failed to place order:', error);
     throw error;
@@ -1136,3 +1153,113 @@ export async function deleteOffer(offerId: number): Promise<{ success: boolean; 
   }
 }
 
+// --- App Users (Admin View) ---
+
+export interface AppUser {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  shop_name: string;
+  address: string;
+  region: string;
+  latitude?: string;
+  longitude?: string;
+  created_at: string;
+}
+
+export interface AppUserProductItem {
+  id: number;
+  name: string;
+  price: number;
+  image_url: string;
+  unit: string;
+  quantity?: number; // Only present in Cart
+}
+
+export async function fetchAppUsers(
+  page: number = 1,
+  search?: string
+): Promise<{ data: AppUser[]; nextPage: number | null }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    let url = `${API_BASE_URL}/app-users?page=${page}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return { data: [], nextPage: null };
+    const resData = await res.json();
+
+    const items = resData.users?.data || [];
+    const nextPage = resData.users?.next_page ?? null;
+    return { data: items, nextPage };
+  } catch (error) {
+    console.error('fetchAppUsers error:', error);
+    return { data: [], nextPage: null };
+  }
+}
+
+export async function fetchAppUserCart(
+  userId: number,
+  page: number = 1
+): Promise<{ data: AppUserProductItem[]; nextPage: number | null }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const url = `${API_BASE_URL}/app-users/${userId}/cart?page=${page}`;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return { data: [], nextPage: null };
+    const resData = await res.json();
+
+    const items = resData.cart?.data || [];
+    const nextPage = resData.cart?.next_page ?? null;
+    return { data: items, nextPage };
+  } catch (error) {
+    console.error('fetchAppUserCart error:', error);
+    return { data: [], nextPage: null };
+  }
+}
+
+export async function fetchAppUserWishlist(
+  userId: number,
+  page: number = 1
+): Promise<{ data: AppUserProductItem[]; nextPage: number | null }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const url = `${API_BASE_URL}/app-users/${userId}/wishlist?page=${page}`;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return { data: [], nextPage: null };
+    const resData = await res.json();
+
+    const items = resData.wishlist?.data || [];
+    const nextPage = resData.wishlist?.next_page ?? null;
+    return { data: items, nextPage };
+  } catch (error) {
+    console.error('fetchAppUserWishlist error:', error);
+    return { data: [], nextPage: null };
+  }
+}
+
+export async function deleteAppUserCartItem(userId: number, productId: number): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const url = `${API_BASE_URL}/app-users/${userId}/cart/${productId}`;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { method: 'DELETE', headers });
+    const data = await res.json();
+    return { success: res.ok && data.success, message: data.message || 'Error deleting item' };
+  } catch (error: any) {
+    console.error('deleteAppUserCartItem error:', error);
+    return { success: false, message: error.message || 'Connection error' };
+  }
+}

@@ -170,7 +170,7 @@ export default function ShopExploreScreen() {
   const handleAddToCart = async (product: Product) => {
     if (!product || !product.id) return;
     const targetId = Number(product.id);
-    const existing = cartItems.find((i) => Number(i.product_id || i.id) === targetId);
+    const existing = cartItems.find((i) => Number(i.product_id) === targetId);
     const currentQty = existing?.quantity || 0;
     const maxAllowed = product.active_offer?.offer_max_quantity ?? product.max_app_order_quantity;
     const maxAllowedNum = Number(maxAllowed);
@@ -203,7 +203,7 @@ export default function ShopExploreScreen() {
 
     // Optimistic update
     setCartItems((prev) => {
-      const idx = prev.findIndex((i) => Number(i.product_id || i.id) === targetId);
+      const idx = prev.findIndex((i) => Number(i.product_id) === targetId);
       if (idx > -1) {
         const updated = [...prev];
         let newQty = updated[idx].quantity + 1;
@@ -238,7 +238,7 @@ export default function ShopExploreScreen() {
 
   const handleUpdateCartQty = async (productId: number | string, delta: number) => {
     const pId = Number(productId);
-    const existing = cartItems.find((i) => Number(i.product_id || i.id) === pId);
+    const existing = cartItems.find((i) => Number(i.product_id) === pId);
 
     if (delta > 0 && existing && !isAdminOrSubAdmin(userProfile)) {
       const maxAllowed = existing.max_app_order_quantity;
@@ -262,7 +262,7 @@ export default function ShopExploreScreen() {
     setCartItems((prev) => {
       const updated = prev
         .map((item) => {
-          if (Number(item.product_id || item.id) === pId) {
+          if (Number(item.product_id) === pId) {
             let newQty = item.quantity + delta;
             const maxLimit = item.max_app_order_quantity;
             const maxLimitNum = Number(maxLimit);
@@ -369,7 +369,7 @@ export default function ShopExploreScreen() {
           if (!item) return null;
           const itemId = Number(item.id);
           const isFav = favoriteIds.includes(itemId);
-          const cartItem = cartItems.find((i) => Number(i.product_id || i.id) === itemId);
+          const cartItem = cartItems.find((i) => Number(i.product_id) === itemId);
           const qtyInCart = cartItem?.quantity || 0;
           const hasOffer = Boolean(item.active_offer);
 

@@ -30,7 +30,6 @@ const ALL_STATUSES = [
   { key: OrderStatus.CONFIRMED, label: ORDER_STATUS_LABELS[OrderStatus.CONFIRMED], color: '#166534', bg: '#DCFCE7' },
   { key: OrderStatus.SHIPPED, label: ORDER_STATUS_LABELS[OrderStatus.SHIPPED], color: '#1E40AF', bg: '#DBEAFE' },
   { key: OrderStatus.DELIVERED, label: ORDER_STATUS_LABELS[OrderStatus.DELIVERED], color: '#2D3C1F', bg: '#D4EAB7' },
-  { key: OrderStatus.COMPLETED, label: ORDER_STATUS_LABELS[OrderStatus.COMPLETED], color: '#166534', bg: '#DCFCE7' },
   { key: OrderStatus.CANCELLED, label: ORDER_STATUS_LABELS[OrderStatus.CANCELLED], color: '#991B1B', bg: '#FEE2E2' },
 ];
 
@@ -179,10 +178,17 @@ export default function AdminOrderDetailsScreen() {
           <View style={styles.divider} />
 
           <View style={styles.contactList}>
-            <View style={styles.contactItem}>
+            <TouchableOpacity 
+              style={styles.contactItem}
+              onPress={() => {
+                if (customerPhone && customerPhone !== 'لا يوجد رقم هاتف') {
+                  Linking.openURL(`tel:${customerPhone}`);
+                }
+              }}
+            >
               <Text style={styles.contactText}>{customerPhone}</Text>
               <MaterialIcons name="phone" size={18} color="#75786E" />
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.contactItem}
               onPress={() => {

@@ -93,7 +93,6 @@ export default function AdminDashboardScreen() {
   const getStatusColor = (status?: string) => {
     switch (status) {
       case OrderStatus.CONFIRMED:
-      case OrderStatus.COMPLETED:
         return { color: '#166534', bg: '#DCFCE7', label: ORDER_STATUS_LABELS[OrderStatus.CONFIRMED] };
       case OrderStatus.SHIPPED:
         return { color: '#1E40AF', bg: '#DBEAFE', label: ORDER_STATUS_LABELS[OrderStatus.SHIPPED] };

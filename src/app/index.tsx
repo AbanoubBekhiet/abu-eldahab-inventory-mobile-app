@@ -183,7 +183,7 @@ export default function MobileHomeScreen() {
 	const handleAddToCart = async (product: Product) => {
 		if (!product || !product.id) return;
 		const targetId = Number(product.id);
-		const existing = cartItems.find((i) => Number(i.product_id || i.id) === targetId);
+		const existing = cartItems.find((i) => Number(i.product_id) === targetId);
 		const currentQty = existing?.quantity || 0;
 		const maxAllowed = product.max_app_order_quantity;
 		const maxAllowedNum = Number(maxAllowed);
@@ -207,7 +207,7 @@ export default function MobileHomeScreen() {
 
 		// Optimistic update
 		setCartItems((prev) => {
-			const idx = prev.findIndex((i) => Number(i.product_id || i.id) === targetId);
+			const idx = prev.findIndex((i) => Number(i.product_id) === targetId);
 			if (idx > -1) {
 				const updated = [...prev];
 				let newQty = updated[idx].quantity + 1;
@@ -242,7 +242,7 @@ export default function MobileHomeScreen() {
 
 	const handleUpdateCartQty = async (productId: number | string, delta: number) => {
 		const pId = Number(productId);
-		const existing = cartItems.find((i) => Number(i.product_id || i.id) === pId);
+		const existing = cartItems.find((i) => Number(i.product_id) === pId);
 
 		if (delta > 0 && existing && !isAdminOrSubAdmin(userProfile)) {
 			const maxAllowed = existing.max_app_order_quantity;
@@ -266,7 +266,7 @@ export default function MobileHomeScreen() {
 		setCartItems((prev) => {
 			const updated = prev
 				.map((item) => {
-					if (Number(item.product_id || item.id) === pId) {
+					if (Number(item.product_id) === pId) {
 						let newQty = item.quantity + delta;
 						const maxLimit = item.max_app_order_quantity;
 						const maxLimitNum = Number(maxLimit);
@@ -307,7 +307,7 @@ export default function MobileHomeScreen() {
 						<View style={styles.greetingHeader}>
 							<View style={styles.userAvatarBadge}>
 								<Image
-									source={require('../../assets/images/logo.jpeg')}
+									source={require('../../assets/images/default_logo.jpeg')}
 									style={{ width: 40, height: 40, borderRadius: 20 }}
 									resizeMode="contain"
 								/>
@@ -482,7 +482,7 @@ export default function MobileHomeScreen() {
 				renderItem={({ item }) => {
 					if (!item) return null;
 					const itemId = Number(item.id);
-					const cartItem = cartItems.find((i) => Number(i.product_id || i.id) === itemId);
+					const cartItem = cartItems.find((i) => Number(i.product_id) === itemId);
 					const qtyInCart = cartItem?.quantity || 0;
 					const displayPrice = (Number(item.price) || 0).toFixed(2);
 					const isFav = favoriteIds.includes(itemId);

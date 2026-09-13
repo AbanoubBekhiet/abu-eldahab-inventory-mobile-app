@@ -193,13 +193,11 @@ export default function LoginScreen() {
         <View style={styles.loginCard}>
           {/* Logo & Welcome Header */}
           <View style={styles.headerBox}>
-            <View style={styles.logoCircle}>
-              <Image
-                source={require('../../assets/images/logo.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={require('../../assets/images/logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
             <Text style={styles.brandTitle}>أبو الدهب للمواد الاستهلاكية</Text>
             <Text style={styles.welcomeSubtitle}>
               {isRegister ? 'تسجيل متجر / عميل جديد' : 'منصة التوزيع والجملة للخردوات والمنظفات والورقيات'}
@@ -397,7 +395,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF8F1',
+    backgroundColor: '#dac291',
   },
   scrollContent: {
     flex: 1,
@@ -427,23 +425,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  logoCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#D4EAB7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
   logoImage: {
-    width: 38,
-    height: 38,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    overflow: 'hidden',
+    marginBottom: 12,
   },
   brandTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1F1B13',
+    color: '#498576',
     textAlign: 'center',
   },
   welcomeSubtitle: {

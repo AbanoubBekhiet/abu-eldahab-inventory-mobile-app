@@ -84,7 +84,7 @@ export default function CustomerOffersScreen() {
   const handleAddToCart = async (offer: ActiveOffer) => {
     if (!offer.product) return;
     const targetId = Number(offer.product_id);
-    const existing = cartItems.find((i) => Number(i.product_id || i.id) === targetId);
+    const existing = cartItems.find((i) => Number(i.product_id) === targetId);
     const currentQty = existing?.quantity || 0;
     const maxAllowed = offer.offer_max_quantity ?? offer.product.max_app_order_quantity;
     const maxAllowedNum = Number(maxAllowed);
@@ -112,7 +112,7 @@ export default function CustomerOffersScreen() {
     };
 
     setCartItems((prev) => {
-      const idx = prev.findIndex((i) => Number(i.product_id || i.id) === targetId);
+      const idx = prev.findIndex((i) => Number(i.product_id) === targetId);
       if (idx > -1) {
         const updated = [...prev];
         let newQty = updated[idx].quantity + 1;
@@ -145,7 +145,7 @@ export default function CustomerOffersScreen() {
   };
 
   const handleUpdateCartQty = async (productId: number, delta: number) => {
-    const existing = cartItems.find((i) => Number(i.product_id || i.id) === productId);
+    const existing = cartItems.find((i) => Number(i.product_id) === productId);
 
     if (delta > 0 && existing && !isAdminOrSubAdmin(userProfile)) {
       const maxAllowed = existing.max_app_order_quantity;
@@ -168,7 +168,7 @@ export default function CustomerOffersScreen() {
     setCartItems((prev) => {
       const updated = prev
         .map((item) => {
-          if (Number(item.product_id || item.id) === productId) {
+          if (Number(item.product_id) === productId) {
             let newQty = item.quantity + delta;
             const maxLimit = item.max_app_order_quantity;
             const maxLimitNum = Number(maxLimit);

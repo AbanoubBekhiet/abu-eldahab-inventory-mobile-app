@@ -9,7 +9,7 @@ interface AppImageProps {
   iconName?: keyof typeof MaterialIcons.glyphMap;
 }
 
-const defaultLogo = require('../../assets/images/logo.jpeg');
+const defaultLogo = require('../../assets/images/default_logo.jpeg');
 
 export function AppImage({
   uri,

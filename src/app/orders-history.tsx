@@ -20,7 +20,6 @@ const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }
   pending:   { label: 'قيد الانتظار', color: '#92400E', bg: '#FEF3C7' },
   confirmed: { label: 'تم التأكيد',   color: '#166534', bg: '#DCFCE7' },
   shipped:   { label: 'تم الشحن',     color: '#1E40AF', bg: '#DBEAFE' },
-  completed: { label: 'مكتمل',        color: '#166534', bg: '#DCFCE7' },
   delivered: { label: 'تم التوصيل',   color: '#2D3C1F', bg: '#D4EAB7' },
   cancelled: { label: 'ملغي',         color: '#991B1B', bg: '#FEE2E2' },
 };
@@ -114,7 +113,7 @@ export default function OrdersHistoryScreen() {
         renderItem={({ item }) => {
           if (!item) return null;
           const orderId = item.id || (item.raw_id ? `#ORD-${String(item.raw_id).padStart(4, '0')}` : 'طلب');
-          const statusInfo = STATUS_LABELS[item.status] ?? { label: item.status || 'مكتمل', color: '#75786E', bg: '#F6EDE0' };
+          const statusInfo = STATUS_LABELS[item.status] ?? { label: item.status || 'قيد الانتظار', color: '#75786E', bg: '#F6EDE0' };
           const isExpanded = expandedOrder === (item.raw_id || item.id);
           const productsList = item.products || item.items || [];
           const netTotal = item.net_total || item.total || '0.00 ج.م';

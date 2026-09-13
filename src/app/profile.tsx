@@ -31,7 +31,6 @@ const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }
   pending:   { label: 'قيد الانتظار', color: '#92400E', bg: '#FEF3C7' },
   confirmed: { label: 'تم التأكيد',   color: '#166534', bg: '#DCFCE7' },
   shipped:   { label: 'تم الشحن',     color: '#1E40AF', bg: '#DBEAFE' },
-  completed: { label: 'مكتمل',        color: '#166534', bg: '#DCFCE7' },
   delivered: { label: 'تم التوصيل',   color: '#2D3C1F', bg: '#D4EAB7' },
   cancelled: { label: 'ملغي',         color: '#991B1B', bg: '#FEE2E2' },
 };

@@ -21,6 +21,7 @@ import {
   placeCustomerOrder,
   CartItem,
   fetchUserProfile,
+  User,
 } from '../services/api';
 import { AppImage } from '../components/app-image';
 import { useRoleGuard } from '../hooks/useRoleGuard';
@@ -33,6 +34,7 @@ export default function CartScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [userProfile, setUserProfile] = useState<User | null>(null);
 
   useEffect(() => {
     loadRealCart();
@@ -41,8 +43,12 @@ export default function CartScreen() {
   const loadRealCart = async () => {
     setLoading(true);
     try {
-      const items = await getCartItems();
+      const [items, user] = await Promise.all([
+        getCartItems(),
+        fetchUserProfile()
+      ]);
       setCartItems(items);
+      setUserProfile(user);
     } catch (e) {
       setCartItems([]);
     } finally {
@@ -53,8 +59,8 @@ export default function CartScreen() {
   const subtotal = cartItems.reduce((sum, i) => sum + (Number(i.price) || 0) * i.quantity, 0);
   const totalItemsCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
 
-  const handleUpdateQuantity = async (id: number, delta: number) => {
-    const item = cartItems.find((i) => Number(i.product_id || i.id) === id);
+  const handleUpdateQuantity = async (productId: number, delta: number) => {
+    const item = cartItems.find((i) => Number(i.product_id) === productId);
     if (delta > 0 && item && item.max_app_order_quantity) {
       const maxLimitNum = Number(item.max_app_order_quantity);
       if (maxLimitNum > 0 && item.quantity >= maxLimitNum) {
@@ -65,12 +71,12 @@ export default function CartScreen() {
         return;
       }
     }
-    const updated = await updateCartItemQty(id, delta);
+    const updated = await updateCartItemQty(productId, delta);
     setCartItems(updated);
   };
 
-  const handleRemoveItem = async (id: number) => {
-    const updated = await removeCartItem(id);
+  const handleRemoveItem = async (productId: number) => {
+    const updated = await removeCartItem(productId);
     setCartItems(updated);
   };
 
@@ -79,26 +85,21 @@ export default function CartScreen() {
     setSubmitting(true);
     try {
       // Validate region limits
-      try {
-        const user = await fetchUserProfile();
-        if (user && user.region) {
-          if (user.region.min_order_total > 0 && subtotal < user.region.min_order_total) {
-            Alert.alert('الحد الأدنى للطلب', `الحد الأدنى لقيمة الطلب لمنطقتك هو ${user.region.min_order_total} ج.م`);
-            setSubmitting(false);
-            return;
-          }
-          if (user.region.min_products_count > 0 && cartItems.length < user.region.min_products_count) {
-            Alert.alert('الحد الأدنى للمنتجات', `الحد الأدنى لعدد المنتجات لمنطقتك هو ${user.region.min_products_count} صنف`);
-            setSubmitting(false);
-            return;
-          }
+      if (userProfile && userProfile.region) {
+        if (userProfile.region.min_order_total > 0 && subtotal < userProfile.region.min_order_total) {
+          Alert.alert('الحد الأدنى للطلب', `الحد الأدنى لقيمة الطلب لمنطقتك هو ${userProfile.region.min_order_total} ج.م`);
+          setSubmitting(false);
+          return;
         }
-      } catch (err) {
-        // Continue if profile fetch fails
+        if (userProfile.region.min_products_count > 0 && cartItems.length < userProfile.region.min_products_count) {
+          Alert.alert('الحد الأدنى للمنتجات', `الحد الأدنى لعدد المنتجات لمنطقتك هو ${userProfile.region.min_products_count} صنف`);
+          setSubmitting(false);
+          return;
+        }
       }
 
       const itemsPayload = cartItems.map((i) => ({
-        product_id: i.product_id || i.id,
+        product_id: i.product_id,
         quantity: i.quantity,
         unit_price: Number(i.price) || 0,
       }));
@@ -123,12 +124,30 @@ export default function CartScreen() {
 
       <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Page Title & Count Badge */}
-        <View style={styles.pageHeaderRow}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <MaterialIcons name="arrow-forward-ios" size={20} color="#1F1B13" />
+          </TouchableOpacity>
+          <Text style={styles.pageTitle}>سلة المشتريات</Text>
           <View style={styles.countBadge}>
             <Text style={styles.countBadgeText}>{totalItemsCount} عناصر</Text>
           </View>
-          <Text style={styles.pageTitle}>سلة المشتريات</Text>
         </View>
+
+        {/* Region Limits Banner */}
+        {userProfile?.region && (userProfile.region.min_order_total > 0 || userProfile.region.min_products_count > 0) && (
+          <View style={styles.limitsBanner}>
+            <MaterialIcons name="info-outline" size={20} color="#856015" />
+            <View style={styles.limitsTextContainer}>
+              {userProfile.region.min_order_total > 0 && (
+                <Text style={styles.limitsText}>الحد الأدنى للطلب: {userProfile.region.min_order_total} ج.م</Text>
+              )}
+              {userProfile.region.min_products_count > 0 && (
+                <Text style={styles.limitsText}>الحد الأدنى للأصناف: {userProfile.region.min_products_count} صنف</Text>
+              )}
+            </View>
+          </View>
+        )}
 
         {loading ? (
           <View style={styles.centerContainer}>
@@ -167,21 +186,21 @@ export default function CartScreen() {
                   <View style={styles.cardLeftCol}>
                     <Text style={styles.cardPrice}>{(Number(item.price) * item.quantity).toFixed(2)} ج.م</Text>
                     <View style={styles.stepperAndTrashRow}>
-                      <TouchableOpacity style={styles.trashBtn} onPress={() => handleRemoveItem(item.id)}>
+                      <TouchableOpacity style={styles.trashBtn} onPress={() => handleRemoveItem(item.product_id)}>
                         <MaterialIcons name="delete-outline" size={20} color="#BA1A1A" />
                       </TouchableOpacity>
 
                       <View style={styles.stepperContainer}>
                         <TouchableOpacity
                           style={styles.stepperBtn}
-                          onPress={() => handleUpdateQuantity(item.id, 1)}
+                          onPress={() => handleUpdateQuantity(item.product_id, 1)}
                         >
                           <MaterialIcons name="add" size={14} color="#1F1B13" />
                         </TouchableOpacity>
                         <Text style={styles.stepperNumber}>{item.quantity}</Text>
                         <TouchableOpacity
                           style={styles.stepperBtn}
-                          onPress={() => handleUpdateQuantity(item.id, -1)}
+                          onPress={() => handleUpdateQuantity(item.product_id, -1)}
                         >
                           <MaterialIcons name="remove" size={14} color="#1F1B13" />
                         </TouchableOpacity>
@@ -257,8 +276,6 @@ export default function CartScreen() {
                   </View>
                 )}
               </TouchableOpacity>
-
-              <Text style={styles.securityCaption}>دفع آمن وسريع عبر أبو الدهب باي</Text>
             </View>
           </>
         )}
@@ -293,12 +310,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
-  pageHeaderRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  limitsBanner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: '#FFF4E5',
+    padding: 12,
+    marginHorizontal: 20,
+    borderRadius: 8,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  limitsTextContainer: {
+    marginRight: 8,
+  },
+  limitsText: {
+    fontSize: 12,
+    color: '#856015',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  backButton: {
+    padding: 4,
   },
   pageTitle: {
     fontSize: 26,

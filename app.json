@@ -2,13 +2,13 @@
   "expo": {
     "name": "abu-eldahab  ابو الدهب",
     "slug": "abu-eldahab",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "abueldahabmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/logo.png"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/logo.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "sbs.abueldahab.abueldahab"
+      "package": "sbs.abueldahab.abueldahab",
+      "versionCode": 2
     },
     "web": {
       "output": "static",
