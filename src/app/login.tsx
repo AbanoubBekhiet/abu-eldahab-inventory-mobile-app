@@ -139,7 +139,12 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const fcmToken = await registerForPushNotificationsAsync();
+      let fcmToken: string | null = null;
+      try {
+        fcmToken = await registerForPushNotificationsAsync();
+      } catch (e) {
+        console.warn('[Login] Could not get FCM token:', e);
+      }
       let res;
       if (isRegister) {
         if (!regionId) {

@@ -15,7 +15,10 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
   // In Expo Go (SDK 53+), remote notifications native code is removed
   const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
   if (isExpoGo) {
-    console.log('Running in Expo Go (SDK 53+): remote notifications disabled in Expo Go. Use a development build for native push notifications.');
+    console.warn(
+      '⚠️ [FCM] Running in Expo Go — push notifications are NOT supported.\n' +
+      'Use a development build (npx expo run:android) for real push notifications.'
+    );
     NotificationsModule = null;
     return null;
   }
@@ -34,7 +37,7 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
       });
     }
   } catch (e) {
-    console.warn('Could not load expo-notifications module:', e);
+    console.warn('[FCM] Could not load expo-notifications module:', e);
     NotificationsModule = null;
   }
 
@@ -47,12 +50,16 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
 export async function syncFcmTokenWithServer(fcmToken: string): Promise<void> {
   try {
     const authToken = await AsyncStorage.getItem('auth_token');
-    if (!authToken) return;
+    if (!authToken) {
+      console.log('[FCM] No auth token, skipping server sync');
+      return;
+    }
 
     // Use the same production API URL as the rest of the app
     const { API_BASE_URL } = require('./api');
 
-    await fetch(`${API_BASE_URL}/auth/fcm-token`, {
+    console.log('[FCM] Syncing token with server...');
+    const response = await fetch(`${API_BASE_URL}/auth/fcm-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -61,23 +68,33 @@ export async function syncFcmTokenWithServer(fcmToken: string): Promise<void> {
       },
       body: JSON.stringify({ fcm_token: fcmToken }),
     });
-  } catch (e) {}
+
+    if (response.ok) {
+      console.log('[FCM] ✅ Token synced with server successfully');
+    } else {
+      const data = await response.text();
+      console.warn('[FCM] ❌ Server rejected token sync:', response.status, data);
+    }
+  } catch (e) {
+    console.error('[FCM] ❌ Failed to sync token with server:', e);
+  }
 }
 
 /**
- * Registers for push notifications and obtains an Expo Push Token or Device FCM Token.
+ * Registers for push notifications and obtains a real push token.
+ * Returns null if running in Expo Go or if permissions are denied.
+ * NEVER returns a fake/generated token.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   const Notifications = getNotificationsModule();
 
   if (!Notifications) {
-    // In Expo Go or non-supported environment, safely generate/retrieve a fallback token
-    const token = await getOrGenerateFcmToken();
-    await syncFcmTokenWithServer(token);
-    return token;
+    console.warn('[FCM] Notifications module not available (likely Expo Go). No token will be generated.');
+    return null;
   }
 
   try {
+    // Set up Android notification channel
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'default',
@@ -85,48 +102,69 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#208AEF',
       });
+      console.log('[FCM] Android notification channel configured');
     }
 
     if (!Device.isDevice) {
-      console.log('Push notifications are recommended on a physical device');
+      console.warn('[FCM] Running on emulator — push notifications may not work reliably');
     }
 
+    // Request permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
+      console.log('[FCM] Requesting notification permissions...');
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
 
     if (finalStatus !== 'granted') {
-      console.log('Push notification permission not granted!');
-      const fallbackToken = await getOrGenerateFcmToken();
-      await syncFcmTokenWithServer(fallbackToken);
-      return fallbackToken;
-    }
-
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId }).catch((e) => {
-      console.error('getExpoPushTokenAsync failed:', e);
+      console.warn('[FCM] ❌ Push notification permission denied by user');
       return null;
-    });
-    const pushToken = tokenData?.data;
-
-    if (pushToken) {
-      await saveFcmToken(pushToken);
-      await syncFcmTokenWithServer(pushToken);
-      return pushToken;
     }
 
-    const fallbackToken = await getOrGenerateFcmToken();
-    await syncFcmTokenWithServer(fallbackToken);
-    return fallbackToken;
+    console.log('[FCM] ✅ Notification permissions granted');
+
+    // Try to get native device push token (FCM token) first — this is what
+    // your Laravel backend needs to send notifications via Firebase Admin SDK
+    try {
+      const deviceTokenData = await Notifications.getDevicePushTokenAsync();
+      const deviceToken = deviceTokenData?.data;
+      if (deviceToken && typeof deviceToken === 'string' && deviceToken.length > 20) {
+        console.log('[FCM] ✅ Got native FCM device token:', deviceToken.substring(0, 20) + '...');
+        await saveFcmToken(deviceToken);
+        await syncFcmTokenWithServer(deviceToken);
+        return deviceToken;
+      }
+    } catch (e) {
+      console.warn('[FCM] Could not get native device token, trying Expo token...', e);
+    }
+
+    // Fallback: try Expo Push Token (for Expo Push Notification Service)
+    try {
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+      if (projectId) {
+        const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        const pushToken = tokenData?.data;
+        if (pushToken) {
+          console.log('[FCM] ✅ Got Expo push token:', pushToken.substring(0, 30) + '...');
+          await saveFcmToken(pushToken);
+          await syncFcmTokenWithServer(pushToken);
+          return pushToken;
+        }
+      } else {
+        console.warn('[FCM] No EAS projectId found, cannot get Expo push token');
+      }
+    } catch (e) {
+      console.error('[FCM] ❌ getExpoPushTokenAsync failed:', e);
+    }
+
+    console.error('[FCM] ❌ Could not obtain any push token');
+    return null;
   } catch (e) {
-    console.error('Failed to get push token:', e);
-    const fallbackToken = await getOrGenerateFcmToken();
-    await syncFcmTokenWithServer(fallbackToken);
-    return fallbackToken;
+    console.error('[FCM] ❌ Failed to register for push notifications:', e);
+    return null;
   }
 }
 
@@ -140,37 +178,27 @@ export function setupNotificationListeners(onNavigate: (type: string, data: any)
   }
 
   try {
+    // Listen for notifications received while app is in foreground
+    const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+      console.log('[FCM] 📬 Notification received in foreground:', notification.request.content.title);
+    });
+
+    // Listen for notification taps
     const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;
+      console.log('[FCM] 👆 Notification tapped:', data);
       if (data?.type) {
         onNavigate(String(data.type), data);
       }
     });
 
     return () => {
+      receivedSubscription.remove();
       responseSubscription.remove();
     };
   } catch (e) {
+    console.error('[FCM] Failed to setup notification listeners:', e);
     return () => {};
-  }
-}
-
-/**
- * Retrieves the stored FCM token or generates a unique token fallback for this device/session.
- */
-export async function getOrGenerateFcmToken(): Promise<string> {
-  try {
-    const existing = await AsyncStorage.getItem(FCM_TOKEN_STORAGE_KEY);
-    if (existing) {
-      return existing;
-    }
-
-    const randomPart = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    const newToken = `fcm_${Date.now()}_${randomPart}`;
-    await AsyncStorage.setItem(FCM_TOKEN_STORAGE_KEY, newToken);
-    return newToken;
-  } catch (e) {
-    return `fcm_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
   }
 }
 
@@ -201,4 +229,12 @@ export async function clearFcmToken(): Promise<void> {
   try {
     await AsyncStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
   } catch (e) {}
+}
+
+/**
+ * @deprecated - No longer generates fake tokens. Use registerForPushNotificationsAsync instead.
+ * Kept for backward compatibility but now just retrieves the saved real token.
+ */
+export async function getOrGenerateFcmToken(): Promise<string | null> {
+  return getFcmToken();
 }

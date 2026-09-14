@@ -17,7 +17,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "sbs.abueldahab.abueldahab",
-      "versionCode": 2
+      "versionCode": 2,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -35,7 +36,22 @@
         }
       ],
       "expo-image",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "color": "#208AEF",
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "ndkVersion": "28.2.13676358"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
