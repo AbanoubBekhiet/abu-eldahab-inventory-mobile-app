@@ -13,6 +13,7 @@ import {
 	Dimensions,
 	RefreshControl,
 } from "react-native";
+import Toast from 'react-native-toast-message';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "expo-router";
@@ -170,11 +171,22 @@ export default function MobileHomeScreen() {
 
 	const handleToggleFavorite = async (productId: number | string) => {
 		const pId = Number(productId);
+		let isAdding = true;
 		// Optimistic update
 		setFavoriteIds((prev) => {
-			if (prev.includes(pId)) return prev.filter((id) => id !== pId);
+			if (prev.includes(pId)) {
+				isAdding = false;
+				return prev.filter((id) => id !== pId);
+			}
 			return [...prev, pId];
 		});
+
+		if (isAdding) {
+			Toast.show({ type: 'success', text1: 'المفضلة', text2: 'تم إضافة المنتج للمفضلة' });
+		} else {
+			Toast.show({ type: 'info', text1: 'المفضلة', text2: 'تم إزالة المنتج من المفضلة' });
+		}
+
 		// Persist to storage
 		const updated = await toggleFavoriteId(pId);
 		setFavoriteIds([...updated.map(Number)]);
@@ -197,10 +209,11 @@ export default function MobileHomeScreen() {
 				maxAllowedNum > 0 &&
 				currentQty >= maxAllowedNum
 			) {
-				Alert.alert(
-					"حد الكمية المسموحة",
-					`عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`,
-				);
+				Toast.show({
+					type: 'error',
+					text1: 'حد الكمية المسموحة',
+					text2: `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+				});
 				return;
 			}
 		}
@@ -238,6 +251,7 @@ export default function MobileHomeScreen() {
 		// Persist to storage
 		const updatedCart = await addProductToCart(product, 1);
 		setCartItems([...updatedCart]);
+		Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
 	};
 
 	const handleUpdateCartQty = async (productId: number | string, delta: number) => {
@@ -254,10 +268,11 @@ export default function MobileHomeScreen() {
 				maxAllowedNum > 0 &&
 				existing.quantity >= maxAllowedNum
 			) {
-				Alert.alert(
-					"حد الكمية المسموحة",
-					`عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
-				);
+				Toast.show({
+					type: 'error',
+					text1: 'حد الكمية المسموحة',
+					text2: `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+				});
 				return;
 			}
 		}
@@ -284,6 +299,11 @@ export default function MobileHomeScreen() {
 		// Persist to storage
 		const updatedCart = await updateCartItemQty(pId, delta);
 		setCartItems([...updatedCart]);
+		if (delta > 0) {
+			Toast.show({ type: 'success', text1: 'السلة', text2: 'تم زيادة الكمية' });
+		} else {
+			Toast.show({ type: 'info', text1: 'السلة', text2: 'تم إنقاص الكمية' });
+		}
 	};
 
 	const totalCartItems = cartItems.reduce((sum, i) => sum + i.quantity, 0);
@@ -401,16 +421,6 @@ export default function MobileHomeScreen() {
 							</View>
 						)}
 
-						{/* FMCG Search Container */}
-						<View style={styles.searchContainer}>
-							<TextInput
-								style={styles.searchInput}
-								placeholder="ابحث عن الخردوات، المنظفات، أو الورقيات..."
-								value={search}
-								onChangeText={setSearch}
-								placeholderTextColor="#75786E"
-							/>
-						</View>
 
 						{/* Categories Horizontal Slider */}
 						<View style={styles.sectionHeaderRow}>
@@ -454,6 +464,17 @@ export default function MobileHomeScreen() {
 									</TouchableOpacity>
 								))}
 							</View>
+						</View>
+
+						{/* FMCG Search Container */}
+						<View style={styles.searchContainer}>
+							<TextInput
+								style={styles.searchInput}
+								placeholder="ابحث عن الخردوات، المنظفات، أو الورقيات..."
+								value={search}
+								onChangeText={setSearch}
+								placeholderTextColor="#75786E"
+							/>
 						</View>
 
 						{/* Products Section Header */}

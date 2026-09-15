@@ -2,6 +2,9 @@ import { useEffect, useCallback } from 'react';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import Toast from 'react-native-toast-message';
+import { toastConfig } from '../components/toast-config';
+import GlobalCartProgress from '../components/global-cart-progress';
 import { registerForPushNotificationsAsync, setupNotificationListeners, syncFcmTokenWithServer, getFcmToken } from '../services/fcm';
 
 // Keep the splash screen visible while we load resources
@@ -65,6 +68,8 @@ export default function RootLayout() {
         <Stack.Screen name="cart" />
         <Stack.Screen name="profile" />
       </Stack>
+      <GlobalCartProgress />
+      <Toast config={toastConfig} />
     </>
   );
 }

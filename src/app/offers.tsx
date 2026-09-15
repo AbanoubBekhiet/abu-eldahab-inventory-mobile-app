@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
-  Alert,
   RefreshControl,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -74,9 +74,21 @@ export default function CustomerOffersScreen() {
   };
 
   const handleToggleFavorite = async (productId: number) => {
-    setFavoriteIds((prev) =>
-      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
-    );
+    let isAdding = true;
+    setFavoriteIds((prev) => {
+      if (prev.includes(productId)) {
+        isAdding = false;
+        return prev.filter((id) => id !== productId);
+      }
+      return [...prev, productId];
+    });
+
+    if (isAdding) {
+      Toast.show({ type: 'success', text1: 'المفضلة', text2: 'تم إضافة المنتج للمفضلة' });
+    } else {
+      Toast.show({ type: 'info', text1: 'المفضلة', text2: 'تم إزالة المنتج من المفضلة' });
+    }
+
     const updated = await toggleFavoriteId(productId);
     setFavoriteIds([...updated.map(Number)]);
   };
@@ -97,10 +109,11 @@ export default function CustomerOffersScreen() {
         maxAllowedNum > 0 &&
         currentQty >= maxAllowedNum
       ) {
-        Alert.alert(
-          'حد الكمية المسموحة',
-          `عذراً، أقصى كمية مسموح بشرائها في هذا العرض هي ${maxAllowedNum} قطعة فقط.`
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'حد الكمية المسموحة',
+          text2: `عذراً، أقصى كمية مسموح بشرائها في هذا العرض هي ${maxAllowedNum} قطعة فقط.`
+        });
         return;
       }
     }
@@ -142,6 +155,7 @@ export default function CustomerOffersScreen() {
 
     const updatedCart = await addProductToCart(productForCart, 1);
     setCartItems([...updatedCart]);
+    Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
   };
 
   const handleUpdateCartQty = async (productId: number, delta: number) => {
@@ -157,10 +171,11 @@ export default function CustomerOffersScreen() {
         maxAllowedNum > 0 &&
         existing.quantity >= maxAllowedNum
       ) {
-        Alert.alert(
-          'حد الكمية المسموحة',
-          `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'حد الكمية المسموحة',
+          text2: `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+        });
         return;
       }
     }
@@ -185,6 +200,11 @@ export default function CustomerOffersScreen() {
 
     const updatedCart = await updateCartItemQty(productId, delta);
     setCartItems([...updatedCart]);
+    if (delta > 0) {
+      Toast.show({ type: 'success', text1: 'السلة', text2: 'تم زيادة الكمية' });
+    } else {
+      Toast.show({ type: 'info', text1: 'السلة', text2: 'تم إنقاص الكمية' });
+    }
   };
 
   const formatExpiry = (expiresAt: string) => {

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -86,6 +87,7 @@ export default function WishlistScreen() {
     const updatedIds = await toggleFavoriteId(productId);
     setFavoriteIds(updatedIds);
     setFavoriteProducts((prev) => prev.filter((p) => p.id !== productId));
+    Toast.show({ type: 'info', text1: 'المفضلة', text2: 'تم إزالة المنتج من المفضلة' });
   };
 
   const handleAddToCart = async (product: Product) => {
@@ -104,10 +106,11 @@ export default function WishlistScreen() {
         maxAllowedNum > 0 &&
         currentQty >= maxAllowedNum
       ) {
-        Alert.alert(
-          'حد الكمية المسموحة',
-          `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'حد الكمية المسموحة',
+          text2: `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+        });
         return;
       }
     }
@@ -143,6 +146,7 @@ export default function WishlistScreen() {
 
     const updatedCart = await addProductToCart(product, 1);
     setCartItems([...updatedCart]);
+    Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
   };
 
   const handleUpdateCartQty = async (productId: number | string, delta: number) => {
@@ -159,10 +163,11 @@ export default function WishlistScreen() {
         maxAllowedNum > 0 &&
         existing.quantity >= maxAllowedNum
       ) {
-        Alert.alert(
-          'حد الكمية المسموحة',
-          `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'حد الكمية المسموحة',
+          text2: `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+        });
         return;
       }
     }
@@ -187,6 +192,11 @@ export default function WishlistScreen() {
 
     const updatedCart = await updateCartItemQty(pId, delta);
     setCartItems([...updatedCart]);
+    if (delta > 0) {
+      Toast.show({ type: 'success', text1: 'السلة', text2: 'تم زيادة الكمية' });
+    } else {
+      Toast.show({ type: 'info', text1: 'السلة', text2: 'تم إنقاص الكمية' });
+    }
   };
 
   const totalCartItems = cartItems.reduce((sum, i) => sum + i.quantity, 0);

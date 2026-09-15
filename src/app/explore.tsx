@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  TextInput,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -39,15 +41,19 @@ export default function ShopExploreScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const params = useLocalSearchParams();
   const [selectedCategory, setSelectedCategory] = useState<string | number>('all');
+  const [search, setSearch] = useState<string>('');
 
-  // Watch for categoryId param changes
+  // Watch for route param changes
   React.useEffect(() => {
     if (params.categoryId) {
       setSelectedCategory(
         params.categoryId === 'all' ? 'all' : Number(params.categoryId)
       );
     }
-  }, [params.categoryId]);
+    if (params.searchQuery !== undefined) {
+      setSearch(params.searchQuery as string);
+    }
+  }, [params.categoryId, params.searchQuery]);
   const [loading, setLoading] = useState(true);
 
   // User profile (for admin limit bypass)
@@ -89,11 +95,11 @@ export default function ShopExploreScreen() {
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Reload products when category changes
-  const loadShopProducts = useCallback(async (catId: string | number) => {
+  // Reload products when category or search changes
+  const loadShopProducts = useCallback(async (catId: string | number, currentSearch: string) => {
     setLoading(true);
     try {
-      const res = await fetchAppProducts(undefined, catId, 1);
+      const res = await fetchAppProducts(currentSearch, catId, 1);
       setProducts(Array.isArray(res.products) ? res.products : []);
       setNextPage(res.nextPage);
     } catch (e) {
@@ -108,7 +114,7 @@ export default function ShopExploreScreen() {
     if (!nextPage || loadingMore || loading) return;
     setLoadingMore(true);
     try {
-      const res = await fetchAppProducts(undefined, selectedCategory, nextPage);
+      const res = await fetchAppProducts(search, selectedCategory, nextPage);
       if (Array.isArray(res.products) && res.products.length > 0) {
         setProducts((prev) => [...prev, ...res.products]);
       }
@@ -120,10 +126,10 @@ export default function ShopExploreScreen() {
     }
   };
 
-  // Whenever selectedCategory changes, reload products
+  // Whenever selectedCategory or search changes, reload products
   React.useEffect(() => {
-    loadShopProducts(selectedCategory);
-  }, [selectedCategory, loadShopProducts]);
+    loadShopProducts(selectedCategory, search);
+  }, [selectedCategory, search, loadShopProducts]);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -131,7 +137,7 @@ export default function ShopExploreScreen() {
     setRefreshing(true);
     try {
       await Promise.all([
-        loadShopProducts(selectedCategory),
+        loadShopProducts(selectedCategory, search),
         (async () => {
           const [user, cats, favs, cart] = await Promise.all([
             fetchUserProfile(),
@@ -154,14 +160,23 @@ export default function ShopExploreScreen() {
 
   const handleToggleFavorite = async (productId: number | string) => {
     const pId = Number(productId);
+    let isAdding = true;
     // Optimistic update
     setFavoriteIds((prev) => {
       if (prev.includes(pId)) {
+        isAdding = false;
         return prev.filter((id) => id !== pId);
       } else {
         return [...prev, pId];
       }
     });
+
+    if (isAdding) {
+      Toast.show({ type: 'success', text1: 'المفضلة', text2: 'تم إضافة المنتج للمفضلة' });
+    } else {
+      Toast.show({ type: 'info', text1: 'المفضلة', text2: 'تم إزالة المنتج من المفضلة' });
+    }
+
     // Persist to storage
     const updated = await toggleFavoriteId(pId);
     setFavoriteIds([...updated.map(Number)]);
@@ -187,10 +202,11 @@ export default function ShopExploreScreen() {
         maxAllowedNum > 0 &&
         currentQty >= maxAllowedNum
       ) {
-        Alert.alert(
-          'حد الكمية المسموحة',
-          `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'حد الكمية المسموحة',
+          text2: `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+        });
         return;
       }
     }
@@ -234,6 +250,7 @@ export default function ShopExploreScreen() {
     // Persist to storage
     const updatedCart = await addProductToCart(productForCart, 1);
     setCartItems([...updatedCart]);
+    Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
   };
 
   const handleUpdateCartQty = async (productId: number | string, delta: number) => {
@@ -250,10 +267,11 @@ export default function ShopExploreScreen() {
         maxAllowedNum > 0 &&
         existing.quantity >= maxAllowedNum
       ) {
-        Alert.alert(
-          'حد الكمية المسموحة',
-          `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'حد الكمية المسموحة',
+          text2: `عذراً، أقصى كمية مسموح بشرائها هي ${maxAllowedNum} قطعة فقط.`
+        });
         return;
       }
     }
@@ -280,6 +298,11 @@ export default function ShopExploreScreen() {
     // Persist to storage
     const updatedCart = await updateCartItemQty(pId, delta);
     setCartItems([...updatedCart]);
+    if (delta > 0) {
+      Toast.show({ type: 'success', text1: 'السلة', text2: 'تم زيادة الكمية' });
+    } else {
+      Toast.show({ type: 'info', text1: 'السلة', text2: 'تم إنقاص الكمية' });
+    }
   };
 
   const totalCartItems = cartItems.reduce((sum, i) => sum + i.quantity, 0);
@@ -289,6 +312,18 @@ export default function ShopExploreScreen() {
       {/* Top App Header */}
       <View style={styles.topAppBar}>
         <Text style={styles.brandTitle}>أبو الدهب - الخردوات والمنظفات والورقيات</Text>
+      </View>
+
+      {/* Store Search Container */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="ابحث عن الخردوات، المنظفات، أو الورقيات..."
+          value={search}
+          onChangeText={setSearch}
+          placeholderTextColor="#75786E"
+          returnKeyType="search"
+        />
       </View>
 
       <FlatList
@@ -499,6 +534,21 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#1F1B13',
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginVertical: 8,
+  },
+  searchInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EAE1D5',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 13,
+    color: '#1F1B13',
+    textAlign: 'right',
   },
   scrollContent: {
     flex: 1,

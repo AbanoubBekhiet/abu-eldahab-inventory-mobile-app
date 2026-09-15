@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -64,20 +64,27 @@ export default function CartScreen() {
     if (delta > 0 && item && item.max_app_order_quantity) {
       const maxLimitNum = Number(item.max_app_order_quantity);
       if (maxLimitNum > 0 && item.quantity >= maxLimitNum) {
-        Alert.alert(
-          'حد الكمية المسموحة',
-          `عذراً، أقصى كمية مسموح بشرائها لهذا المنتج هي ${maxLimitNum} قطعة فقط.`
-        );
+        Toast.show({
+          type: 'error',
+          text1: 'حد الكمية المسموحة',
+          text2: `عذراً، أقصى كمية مسموح بشرائها لهذا المنتج هي ${maxLimitNum} قطعة فقط.`
+        });
         return;
       }
     }
     const updated = await updateCartItemQty(productId, delta);
     setCartItems(updated);
+    if (delta > 0) {
+      Toast.show({ type: 'success', text1: 'السلة', text2: 'تم زيادة الكمية' });
+    } else {
+      Toast.show({ type: 'info', text1: 'السلة', text2: 'تم إنقاص الكمية' });
+    }
   };
 
   const handleRemoveItem = async (productId: number) => {
     const updated = await removeCartItem(productId);
     setCartItems(updated);
+    Toast.show({ type: 'info', text1: 'السلة', text2: 'تم إزالة المنتج من السلة' });
   };
 
   const handleCheckout = async () => {
@@ -87,12 +94,12 @@ export default function CartScreen() {
       // Validate region limits
       if (userProfile && userProfile.region) {
         if (userProfile.region.min_order_total > 0 && subtotal < userProfile.region.min_order_total) {
-          Alert.alert('الحد الأدنى للطلب', `الحد الأدنى لقيمة الطلب لمنطقتك هو ${userProfile.region.min_order_total} ج.م`);
+          Toast.show({ type: 'error', text1: 'الحد الأدنى للطلب', text2: `الحد الأدنى لقيمة الطلب لمنطقتك هو ${userProfile.region.min_order_total} ج.م` });
           setSubmitting(false);
           return;
         }
         if (userProfile.region.min_products_count > 0 && cartItems.length < userProfile.region.min_products_count) {
-          Alert.alert('الحد الأدنى للمنتجات', `الحد الأدنى لعدد المنتجات لمنطقتك هو ${userProfile.region.min_products_count} صنف`);
+          Toast.show({ type: 'error', text1: 'الحد الأدنى للمنتجات', text2: `الحد الأدنى لعدد المنتجات لمنطقتك هو ${userProfile.region.min_products_count} صنف` });
           setSubmitting(false);
           return;
         }
@@ -109,7 +116,7 @@ export default function CartScreen() {
       setCartItems([]);
       setOrderSuccess(true);
     } catch (e: any) {
-      Alert.alert('خطأ', e.message || 'حدث خطأ أثناء تنفيذ الطلب. يرجى المحاولة لاحقاً.');
+      Toast.show({ type: 'error', text1: 'خطأ', text2: e.message || 'حدث خطأ أثناء تنفيذ الطلب. يرجى المحاولة لاحقاً.' });
     } finally {
       setSubmitting(false);
     }

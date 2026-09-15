@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearFcmToken } from './fcm';
-import { Alert } from 'react-native';
+import { Alert, DeviceEventEmitter } from 'react-native';
 
 function getApiBaseUrl(): string {
   // If you need to test locally, uncomment the code below:
@@ -198,7 +198,9 @@ export async function getCartItems(): Promise<CartItem[]> {
     const res = await fetch(`${API_BASE_URL}/cart`, { headers });
     if (!res.ok) return [];
     const data = await res.json();
-    return data.cart_items || [];
+    const items = data.cart_items || [];
+    DeviceEventEmitter.emit('cart_updated', { cartItems: items, action: 'sync' });
+    return items;
   } catch (e) {
     return [];
   }
@@ -235,11 +237,15 @@ export async function addProductToCart(product: Product, quantity = 1): Promise<
     if (data.success === false) {
        throw new Error(data.message || 'Error adding to cart');
     }
-    return data.cart_items || [];
+    const items = data.cart_items || [];
+    DeviceEventEmitter.emit('cart_updated', { cartItems: items, action: 'add' });
+    return items;
   } catch (e: any) {
     const msg = e?.message || 'حدث خطأ أثناء الإضافة للسلة';
     Alert.alert('تنبيه', msg);
-    return await getCartItems();
+    const items = await getCartItems();
+    DeviceEventEmitter.emit('cart_updated', { cartItems: items, action: 'sync' });
+    return items;
   }
 }
 
@@ -267,11 +273,15 @@ export async function updateCartItemQty(productId: number | string, delta: numbe
     if (data.success === false) {
        throw new Error(data.message || 'حدث خطأ أثناء تعديل السلة');
     }
-    return data.cart_items || [];
+    const items = data.cart_items || [];
+    DeviceEventEmitter.emit('cart_updated', { cartItems: items, action: delta > 0 ? 'increase' : 'decrease' });
+    return items;
   } catch (e: any) {
-    const msg = e?.message || 'حدث خطأ أثناء تعديل السلة';
+    const msg = e?.message || 'حدث خطأ أثناء تحديث السلة';
     Alert.alert('تنبيه', msg);
-    return await getCartItems();
+    const items = await getCartItems();
+    DeviceEventEmitter.emit('cart_updated', { cartItems: items, action: 'sync' });
+    return items;
   }
 }
 
@@ -290,9 +300,13 @@ export async function removeCartItem(productId: number | string): Promise<CartIt
     });
     if (!res.ok) return await getCartItems();
     const data = await res.json();
-    return data.cart_items || [];
+    const items = data.cart_items || [];
+    DeviceEventEmitter.emit('cart_updated', { cartItems: items, action: 'remove' });
+    return items;
   } catch (e) {
-    return await getCartItems();
+    const items = await getCartItems();
+    DeviceEventEmitter.emit('cart_updated', { cartItems: items, action: 'sync' });
+    return items;
   }
 }
 
@@ -309,7 +323,10 @@ export async function clearCart(): Promise<void> {
       method: 'DELETE',
       headers
     });
-  } catch (e) {}
+    DeviceEventEmitter.emit('cart_updated', { cartItems: [], action: 'clear' });
+  } catch (e: any) {
+    console.error('clearCart error:', e);
+  }
 }
 
 // Favorites Management via Backend API
@@ -523,6 +540,15 @@ export async function fetchAdminOrders(): Promise<Order[]> {
   return res.orders;
 }
 
+export async function fetchPendingOrdersCount(): Promise<number> {
+  try {
+    const res = await fetchAdminOrdersPaginated(1);
+    return res.orders.filter(o => o.status === OrderStatus.PENDING).length;
+  } catch (error) {
+    return 0;
+  }
+}
+
 // Fetch products for admin (shows all products including inactive ones, paginated)
 export async function fetchAdminProducts(
   search?: string,
@@ -624,6 +650,7 @@ export async function loginCustomer(email: string, password: string, fcmToken?: 
     cachedUser = data.user;
     AsyncStorage.setItem('user_profile_v1', JSON.stringify(data.user)).catch(() => {});
   }
+  DeviceEventEmitter.emit('auth_updated');
   return data;
 }
 
@@ -672,6 +699,7 @@ export async function registerCustomer(
     cachedUser = data.user;
     AsyncStorage.setItem('user_profile_v1', JSON.stringify(data.user)).catch(() => {});
   }
+  DeviceEventEmitter.emit('auth_updated');
   return data;
 }
 
@@ -690,7 +718,10 @@ export async function logoutCustomer() {
   } catch (e) {
   } finally {
     setAuthToken(null);
+    cachedUser = null;
+    await AsyncStorage.removeItem('user_profile_v1').catch(() => {});
     await clearFcmToken();
+    DeviceEventEmitter.emit('auth_updated');
   }
 }
 

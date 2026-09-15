@@ -2,13 +2,14 @@
   "expo": {
     "name": "abu-eldahab  ابو الدهب",
     "slug": "abu-eldahab",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "abueldahabmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/logo.png"
+      "icon": "./assets/images/logo.png",
+      "bundleIdentifier": "sbs.abueldahab.abueldahab"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,8 +18,14 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "sbs.abueldahab.abueldahab",
-      "versionCode": 2,
-      "googleServicesFile": "./google-services.json"
+      "versionCode": 3,
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "output": "static",
@@ -51,7 +58,9 @@
             "ndkVersion": "28.2.13676358"
           }
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

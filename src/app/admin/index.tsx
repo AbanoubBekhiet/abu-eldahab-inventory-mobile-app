@@ -31,7 +31,7 @@ export default function AdminDashboardScreen() {
   useRoleGuard('admin');
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [selectedFilter, setSelectedFilter] = useState<OrderStatus | 'all'>(OrderStatus.PENDING);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [nextPage, setNextPage] = useState<number | null>(null);
@@ -241,12 +241,12 @@ export default function AdminDashboardScreen() {
           contentContainerStyle={styles.chipsContainer}
         >
           {[
-            { key: 'all', label: `الكل (${orders.length})` },
             { key: OrderStatus.PENDING, label: ORDER_STATUS_LABELS[OrderStatus.PENDING] },
             { key: OrderStatus.CONFIRMED, label: ORDER_STATUS_LABELS[OrderStatus.CONFIRMED] },
             { key: OrderStatus.SHIPPED, label: ORDER_STATUS_LABELS[OrderStatus.SHIPPED] },
             { key: OrderStatus.DELIVERED, label: ORDER_STATUS_LABELS[OrderStatus.DELIVERED] },
             { key: OrderStatus.CANCELLED, label: ORDER_STATUS_LABELS[OrderStatus.CANCELLED] },
+            { key: 'all', label: `الكل (${orders.length})` },
           ].map((chip) => (
             <TouchableOpacity
               key={chip.key}

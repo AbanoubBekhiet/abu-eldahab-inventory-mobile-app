@@ -3,11 +3,22 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 
+import { fetchPendingOrdersCount } from '../services/api';
+
 export default function MobileFooterNav({ cartCount = 0, wishlistCount = 0, isAdmin = false }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [pendingOrdersCount, setPendingOrdersCount] = React.useState(0);
 
   const isAdminRoute = isAdmin || pathname.startsWith('/admin');
+
+  React.useEffect(() => {
+    if (isAdminRoute) {
+      fetchPendingOrdersCount().then(count => {
+        setPendingOrdersCount(count);
+      });
+    }
+  }, [isAdminRoute]);
 
   interface NavItem {
     key: string;
@@ -27,7 +38,7 @@ export default function MobileFooterNav({ cartCount = 0, wishlistCount = 0, isAd
   ];
 
   const adminNavItems: NavItem[] = [
-    { key: 'admin-orders', label: 'الطلبات', icon: 'receipt-long', path: '/admin' },
+    { key: 'admin-orders', label: 'الطلبات', icon: 'receipt-long', path: '/admin', badge: pendingOrdersCount },
     { key: 'admin-products', label: 'المنتجات', icon: 'inventory', path: '/admin/products' },
     { key: 'admin-offers', label: 'العروض', icon: 'local-offer', path: '/admin/offers' },
     { key: 'admin-customers', label: 'الحسابات', icon: 'account-balance-wallet', path: '/admin/customers' },
