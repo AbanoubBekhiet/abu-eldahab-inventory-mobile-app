@@ -599,6 +599,8 @@ export async function updateOrderStatus(orderId: string | number, status: string
 
 // Login
 export async function loginCustomer(email: string, password: string, fcmToken?: string | null) {
+  // Sanitize: reject fake/generated tokens
+  const cleanToken = (fcmToken && !fcmToken.startsWith('fcm_') && !fcmToken.startsWith('fake_')) ? fcmToken : null;
   const res = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: {
@@ -608,7 +610,7 @@ export async function loginCustomer(email: string, password: string, fcmToken?: 
     body: JSON.stringify({
       email,
       password,
-      fcm_token: fcmToken || null,
+      fcm_token: cleanToken,
     }),
   });
   const data = await res.json();
@@ -638,6 +640,8 @@ export async function registerCustomer(
   fcmToken?: string | null,
   regionId?: number | null
 ) {
+  // Sanitize: reject fake/generated tokens
+  const cleanToken = (fcmToken && !fcmToken.startsWith('fcm_') && !fcmToken.startsWith('fake_')) ? fcmToken : null;
   const res = await fetch(`${API_BASE_URL}/auth/customer-register`, {
     method: 'POST',
     headers: {
@@ -653,7 +657,7 @@ export async function registerCustomer(
       shop_name: shopName,
       latitude,
       longitude,
-      fcm_token: fcmToken,
+      fcm_token: cleanToken,
       region_id: regionId,
     }),
   });

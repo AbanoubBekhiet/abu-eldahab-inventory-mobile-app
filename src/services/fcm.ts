@@ -49,6 +49,12 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
  */
 export async function syncFcmTokenWithServer(fcmToken: string): Promise<void> {
   try {
+    // Reject fake/generated tokens
+    if (!fcmToken || fcmToken.startsWith('fcm_') || fcmToken.startsWith('fake_')) {
+      console.warn('[FCM] Refusing to sync invalid/fake token with server:', fcmToken?.substring(0, 30));
+      return;
+    }
+
     const authToken = await AsyncStorage.getItem('auth_token');
     if (!authToken) {
       console.log('[FCM] No auth token, skipping server sync');
@@ -126,22 +132,8 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
     console.log('[FCM] ✅ Notification permissions granted');
 
-    // Try to get native device push token (FCM token) first — this is what
-    // your Laravel backend needs to send notifications via Firebase Admin SDK
-    try {
-      const deviceTokenData = await Notifications.getDevicePushTokenAsync();
-      const deviceToken = deviceTokenData?.data;
-      if (deviceToken && typeof deviceToken === 'string' && deviceToken.length > 20) {
-        console.log('[FCM] ✅ Got native FCM device token:', deviceToken.substring(0, 20) + '...');
-        await saveFcmToken(deviceToken);
-        await syncFcmTokenWithServer(deviceToken);
-        return deviceToken;
-      }
-    } catch (e) {
-      console.warn('[FCM] Could not get native device token, trying Expo token...', e);
-    }
-
-    // Fallback: try Expo Push Token (for Expo Push Notification Service)
+    // Try Expo Push Token FIRST — the backend uses the Expo Push API
+    // (no FCM_SERVER_KEY needed), so ExponentPushToken is the preferred format.
     try {
       const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
       if (projectId) {
@@ -157,7 +149,22 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
         console.warn('[FCM] No EAS projectId found, cannot get Expo push token');
       }
     } catch (e) {
-      console.error('[FCM] ❌ getExpoPushTokenAsync failed:', e);
+      console.warn('[FCM] Could not get Expo push token, trying native FCM token...', e);
+    }
+
+    // Fallback: try native device push token (FCM token)
+    // Only useful if backend has FCM_SERVER_KEY configured
+    try {
+      const deviceTokenData = await Notifications.getDevicePushTokenAsync();
+      const deviceToken = deviceTokenData?.data;
+      if (deviceToken && typeof deviceToken === 'string' && deviceToken.length > 20) {
+        console.log('[FCM] ✅ Got native FCM device token (fallback):', deviceToken.substring(0, 20) + '...');
+        await saveFcmToken(deviceToken);
+        await syncFcmTokenWithServer(deviceToken);
+        return deviceToken;
+      }
+    } catch (e) {
+      console.error('[FCM] ❌ getDevicePushTokenAsync also failed:', e);
     }
 
     console.error('[FCM] ❌ Could not obtain any push token');
@@ -204,10 +211,18 @@ export function setupNotificationListeners(onNavigate: (type: string, data: any)
 
 /**
  * Retrieves cached FCM token if present.
+ * Automatically clears stale/fake tokens from older app versions.
  */
 export async function getFcmToken(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(FCM_TOKEN_STORAGE_KEY);
+    const token = await AsyncStorage.getItem(FCM_TOKEN_STORAGE_KEY);
+    // Reject fake/generated tokens from older app versions
+    if (token && (token.startsWith('fcm_') || token.startsWith('fake_'))) {
+      console.warn('[FCM] Found stale fake token in storage, clearing it:', token.substring(0, 30));
+      await AsyncStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
+      return null;
+    }
+    return token;
   } catch (e) {
     return null;
   }

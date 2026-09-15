@@ -2,7 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { registerForPushNotificationsAsync, setupNotificationListeners } from '../services/fcm';
+import { registerForPushNotificationsAsync, setupNotificationListeners, syncFcmTokenWithServer, getFcmToken } from '../services/fcm';
 
 // Keep the splash screen visible while we load resources
 SplashScreen.preventAutoHideAsync();
@@ -21,6 +21,21 @@ export default function RootLayout() {
     // Register for push notifications safely on app startup
     registerForPushNotificationsAsync();
 
+    // After a short delay (to allow auto-login to complete), re-sync the push
+    // token with the server. This ensures admin users who are already logged in
+    // always have their latest real push token saved on the backend.
+    const reSyncTimeout = setTimeout(async () => {
+      try {
+        const savedToken = await getFcmToken();
+        if (savedToken) {
+          console.log('[FCM] Re-syncing saved push token with server after startup...');
+          await syncFcmTokenWithServer(savedToken);
+        }
+      } catch (e) {
+        console.warn('[FCM] Post-startup re-sync failed:', e);
+      }
+    }, 4000);
+
     // Listen for notification taps safely
     const cleanup = setupNotificationListeners((type) => {
       if (type === 'order_status_updated') {
@@ -34,6 +49,7 @@ export default function RootLayout() {
 
     return () => {
       cleanup();
+      clearTimeout(reSyncTimeout);
     };
   }, []);
 

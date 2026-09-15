@@ -136,6 +136,14 @@ export default function LoginScreen() {
       Alert.alert('تنبيه', 'تحديد موقعك الحقيقي (GPS) إلزامي لإتمام التسجيل. يرجى الضغط على زر تحديد الموقع.');
       return;
     }
+    // Guard: detect if address looks like an email (common user mistake)
+    if (isRegister && address && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.trim())) {
+      Alert.alert(
+        'تنبيه',
+        'يبدو أنك أدخلت بريدًا إلكترونيًا في خانة العنوان. يرجى إدخال عنوانك التفصيلي في خانة "العنوان" والبريد الإلكتروني في الخانة المخصصة له.',
+      );
+      return;
+    }
 
     setLoading(true);
     try {
@@ -349,7 +357,26 @@ export default function LoginScreen() {
 
           {/* Toggle Register / Login mode */}
           <View style={styles.toggleFooter}>
-            <TouchableOpacity onPress={() => setIsRegister(!isRegister)}>
+            <TouchableOpacity onPress={() => {
+              if (!isRegister) {
+                // Switching to register mode: clear register-specific fields
+                setName('');
+                setShopName('');
+                setPhone('');
+                setAddress('');
+                setLatitude(null);
+                setLongitude(null);
+                setRegionId(null);
+                // Also clear email so user fills it in the proper context
+                setEmail('');
+                setPassword('');
+              } else {
+                // Switching to login mode: clear all fields
+                setEmail('');
+                setPassword('');
+              }
+              setIsRegister(!isRegister);
+            }}>
               <Text style={styles.toggleActionText}>
                 {isRegister ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}
               </Text>
