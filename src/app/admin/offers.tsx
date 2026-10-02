@@ -153,20 +153,20 @@ export default function AdminOffersScreen() {
 
   const handleDeleteOffer = (offer: OfferItem) => {
     Alert.alert(
-      'إلغاء العرض',
-      `هل أنت تأكد من إلغاء العرض على "${offer.product?.name || 'هذا المنتج'}"؟ سيتم استرجاع السعر الأصلي.`,
+      'حذف العرض',
+      `هل أنت متأكد من حذف العرض على "${offer.product?.name || 'هذا المنتج'}" بشكل نهائي؟`,
       [
         { text: 'تراجع', style: 'cancel' },
         {
-          text: 'إلغاء العرض',
+          text: 'حذف العرض',
           style: 'destructive',
           onPress: async () => {
             const success = await deleteOffer(offer.id);
             if (success) {
-              Alert.alert('تم الإلغاء', 'تم إلغاء العرض واسترجاع سعر المنتج الأصلي.');
+              Alert.alert('تم الحذف', 'تم حذف العرض بنجاح.');
               loadOffers();
             } else {
-              Alert.alert('خطأ', 'فشل إلغاء العرض.');
+              Alert.alert('خطأ', 'فشل حذف العرض.');
             }
           },
         },
@@ -314,15 +314,13 @@ export default function AdminOffersScreen() {
                         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(h)}:${pad(d.getMinutes())} ${ampm}`;
                       } catch { return item.expires_at; }
                     })()}</Text>
-                    {item.is_currently_active && (
-                      <TouchableOpacity
-                        style={styles.deleteBtn}
-                        onPress={() => handleDeleteOffer(item)}
-                      >
-                        <MaterialIcons name="delete-outline" size={16} color="#BA1A1A" />
-                        <Text style={styles.deleteBtnText}>إلغاء العرض</Text>
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
+                      onPress={() => handleDeleteOffer(item)}
+                    >
+                      <MaterialIcons name="delete-outline" size={16} color="#BA1A1A" />
+                      <Text style={styles.deleteBtnText}>حذف العرض</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               );

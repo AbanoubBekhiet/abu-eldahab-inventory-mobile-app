@@ -98,7 +98,7 @@ export default function GlobalCartProgress() {
 
   // Calculate cart subtotal (we calculate this unconditionally to avoid hook conditionally rendering issues if we used a hook, though it's just a derived value)
   const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.price) || 0) * item.quantity, 0);
-  const totalQty = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalQty = cartItems.length;
   
   const minOrder = userProfile?.region?.min_order_total || 1; // Default to 1 to avoid division by zero
   const minQty = userProfile?.region?.min_products_count || 0;
@@ -179,7 +179,7 @@ export default function GlobalCartProgress() {
                 <Text style={styles.title}>
                   {isQtyReached 
                     ? '🎉 العدد: وصلت للحد الأدنى!' 
-                    : `العدد: باقي ${remainingQty} قطعة`}
+                    : `العدد: باقي ${remainingQty} صنف`}
                 </Text>
                 <Text style={styles.percentageText}>{Math.round(qtyPercentage)}%</Text>
               </View>

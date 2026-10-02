@@ -132,12 +132,6 @@ export default function AdminOrderDetailsScreen() {
           <MaterialIcons name="arrow-forward" size={22} color="#1F1B13" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تفاصيل الطلب #{order?.id || id}</Text>
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={() => Alert.alert('طباعة الفاتورة 🖨️', 'جاري إعداد الفاتورة للطباعة...')}
-        >
-          <MaterialIcons name="print" size={22} color="#2D3C1F" />
-        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -277,6 +271,15 @@ export default function AdminOrderDetailsScreen() {
             <Text style={styles.totalLbl}>الإجمالي النهائي</Text>
           </View>
         </View>
+
+        {!!order?.notes && order.notes !== 'طلب عبر تطبيق الموبايل' && order.notes !== 'طلب جديد من تطبيق الموبايل' && (
+          <View style={[styles.cardContainer, { marginBottom: 30 }]}>
+            <Text style={styles.cardSectionTitle}>ملاحظات الطلب 📝</Text>
+            <Text style={{ textAlign: 'right', color: '#1F1B13', fontSize: 14, lineHeight: 22 }}>
+              {order.notes}
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Status Update Modal */}

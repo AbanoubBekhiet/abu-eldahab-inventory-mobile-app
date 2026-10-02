@@ -305,7 +305,7 @@ export default function ShopExploreScreen() {
     }
   };
 
-  const totalCartItems = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+  const totalCartItems = cartItems.length;
 
   return (
     <SafeAreaView style={styles.container}>

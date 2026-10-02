@@ -57,7 +57,7 @@ export default function CartScreen() {
   };
 
   const subtotal = cartItems.reduce((sum, i) => sum + (Number(i.price) || 0) * i.quantity, 0);
-  const totalItemsCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+  const totalItemsCount = cartItems.length;
 
   const handleUpdateQuantity = async (productId: number, delta: number) => {
     const item = cartItems.find((i) => Number(i.product_id) === productId);
