@@ -32,6 +32,8 @@ export function useRoleGuard(requiredRole: 'admin' | 'customer') {
           return;
         }
       } catch (e) {
+        console.warn("Auth Error:", e);
+        router.replace('/login');
       } finally {
         if (active) setLoading(false);
       }

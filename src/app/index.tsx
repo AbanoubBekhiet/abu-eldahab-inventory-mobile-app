@@ -507,6 +507,7 @@ export default function MobileHomeScreen() {
 					const qtyInCart = cartItem?.quantity || 0;
 					const displayPrice = (Number(item.price) || 0).toFixed(2);
 					const isFav = favoriteIds.includes(itemId);
+					const isOutOfStock = Number(item.stock) <= 0;
 
 					return (
 						<View style={[styles.productCard, { width: "48%", marginBottom: 0 }]}>
@@ -533,10 +534,15 @@ export default function MobileHomeScreen() {
 
 								<AppImage
 									uri={item.image_url}
-									style={styles.productImage}
+									style={[styles.productImage, isOutOfStock && { opacity: 0.4 }]}
 									iconName="shopping-basket"
 									iconSize={36}
 								/>
+								{isOutOfStock && (
+									<View style={styles.outOfStockOverlay}>
+										<Text style={styles.outOfStockText}>نفذت الكمية</Text>
+									</View>
+								)}
 							</View>
 
 							<Text style={styles.categoryName}>{item.category_name || "خردوات ومنظفات وورقيات"}</Text>
@@ -565,10 +571,13 @@ export default function MobileHomeScreen() {
 
 							{qtyInCart === 0 ? (
 								<TouchableOpacity
-									style={styles.addButton}
+									style={[styles.addButton, isOutOfStock && { backgroundColor: '#EAE1D5', borderColor: '#EAE1D5' }]}
 									onPress={() => handleAddToCart(item)}
+									disabled={isOutOfStock}
 								>
-									<Text style={styles.addButtonText}>+ إضافة للسلة</Text>
+									<Text style={[styles.addButtonText, isOutOfStock && { color: '#75786E' }]}>
+										{isOutOfStock ? 'غير متوفر' : '+ إضافة للسلة'}
+									</Text>
 								</TouchableOpacity>
 							) : (
 								<View style={styles.qtyControlRow}>
@@ -978,5 +987,20 @@ const styles = StyleSheet.create({
 		color: "#BA1A1A",
 		textDecorationLine: "line-through",
 		fontWeight: "600",
+	},
+	outOfStockOverlay: {
+		position: 'absolute',
+		top: '40%',
+		left: 0,
+		right: 0,
+		backgroundColor: 'rgba(186, 26, 26, 0.8)',
+		paddingVertical: 4,
+		alignItems: 'center',
+		transform: [{ rotate: '-10deg' }],
+	},
+	outOfStockText: {
+		color: '#FFFFFF',
+		fontWeight: 'bold',
+		fontSize: 14,
 	},
 });

@@ -162,6 +162,14 @@ export interface User {
   address?: string;
   role?: string;
   region?: Region;
+  profile?: {
+    phone_number?: string;
+    shop_name?: string;
+    address?: string;
+    latitude?: string | number | null;
+    longitude?: string | number | null;
+    region_id?: string | number | null;
+  };
 }
 
 export interface OrderHistoryItem {
@@ -517,13 +525,21 @@ export async function fetchCustomerOrdersPaginated(
 }
 
 // Fetch admin orders from real API (paginated)
-export async function fetchAdminOrdersPaginated(page: number = 1): Promise<{ orders: Order[]; nextPage: number | null }> {
+export async function fetchAdminOrdersPaginated(
+  page: number = 1,
+  status: string = 'all'
+): Promise<{ orders: Order[]; nextPage: number | null }> {
   try {
     if (!authToken) await loadSavedAuthToken();
     const headers: Record<string, string> = { 'Accept': 'application/json' };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-    const res = await fetch(`${API_BASE_URL}/orders?page=${page}`, { headers });
+    let url = `${API_BASE_URL}/orders?page=${page}`;
+    if (status && status !== 'all') {
+      url += `&status=${status}`;
+    }
+
+    const res = await fetch(url, { headers });
     if (!res.ok) return { orders: [], nextPage: null };
     const data = await res.json();
     const items = data.orders?.data || data.data || (Array.isArray(data) ? data : []);

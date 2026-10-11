@@ -60,16 +60,16 @@ export default function AdminDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadOrders(1);
+    await loadOrders(1, selectedFilter);
     setRefreshing(false);
-  }, []);
+  }, [selectedFilter]);
 
-  const loadOrders = async (pageToLoad: number = 1) => {
+  const loadOrders = async (pageToLoad: number = 1, status: string = selectedFilter) => {
     if (pageToLoad === 1) setLoading(true);
     else setLoadingMore(true);
 
     try {
-      const res = await fetchAdminOrdersPaginated(pageToLoad);
+      const res = await fetchAdminOrdersPaginated(pageToLoad, status);
       if (pageToLoad === 1) {
         setOrders(res.orders);
       } else {
@@ -84,9 +84,13 @@ export default function AdminDashboardScreen() {
     }
   };
 
+  useEffect(() => {
+    loadOrders(1, selectedFilter);
+  }, [selectedFilter]);
+
   const handleLoadMore = () => {
     if (!loadingMore && nextPage !== null) {
-      loadOrders(nextPage);
+      loadOrders(nextPage, selectedFilter);
     }
   };
 
@@ -107,8 +111,6 @@ export default function AdminDashboardScreen() {
   };
 
   const filterOrders = orders.filter((ord) => {
-    const status = ord.status || OrderStatus.PENDING;
-    const matchesFilter = selectedFilter === 'all' || status === selectedFilter;
     const name = (ord as any).customer || ord.customer_name || '';
     const ordId = String(ord.id || '');
     const ordNum = String(ord.order_number || '');
@@ -116,7 +118,7 @@ export default function AdminDashboardScreen() {
       name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ordId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ordNum.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
+    return matchesSearch;
   });
 
   const handleUpdateStatus = async (orderId: string | number, newStatus: string) => {
@@ -254,7 +256,7 @@ export default function AdminDashboardScreen() {
                 styles.filterChip,
                 selectedFilter === chip.key && styles.filterChipActive,
               ]}
-              onPress={() => setSelectedFilter(chip.key)}
+              onPress={() => setSelectedFilter(chip.key as OrderStatus | 'all')}
             >
               <Text
                 numberOfLines={1}

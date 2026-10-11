@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "abu-eldahab  ابو الدهب",
+    "name": "ابو الدهب للتوزيع",
     "slug": "abu-eldahab",
-    "version": "1.0.2",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "abueldahabmobile",
@@ -18,7 +18,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "sbs.abueldahab.abueldahab",
-      "versionCode": 3,
+      "versionCode": 8,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -55,7 +55,7 @@
         "expo-build-properties",
         {
           "android": {
-            "ndkVersion": "28.2.13676358"
+            "ndkVersion": "26.1.10909125"
           }
         }
       ],

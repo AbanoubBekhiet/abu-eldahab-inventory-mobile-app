@@ -269,6 +269,7 @@ export default function CustomerOffersScreen() {
             const cartItem = cartItems.find((ci) => Number(ci.product_id || ci.id) === pId);
             const qtyInCart = cartItem?.quantity || 0;
             const limit = item.offer_max_quantity ?? product.max_app_order_quantity;
+            const isOutOfStock = Number(product.stock) <= 0;
 
             return (
               <View style={styles.offerCard}>
@@ -276,10 +277,16 @@ export default function CustomerOffersScreen() {
                 <View style={styles.imageSection}>
                   <AppImage
                     uri={product.image_url}
-                    style={styles.offerImage}
+                    style={[styles.offerImage, isOutOfStock && { opacity: 0.4 }]}
                     iconName="shopping-basket"
                     iconSize={48}
                   />
+
+                  {isOutOfStock && (
+                    <View style={styles.outOfStockOverlay}>
+                      <Text style={styles.outOfStockText}>نفذت الكمية</Text>
+                    </View>
+                  )}
 
                   {/* Top Left Discount Badge */}
                   {item.discount_percentage ? (
@@ -336,11 +343,14 @@ export default function CustomerOffersScreen() {
                   {/* Cart Action */}
                   {qtyInCart === 0 ? (
                     <TouchableOpacity
-                      style={styles.addCartBtn}
+                      style={[styles.addCartBtn, isOutOfStock && { backgroundColor: '#EAE1D5' }]}
                       onPress={() => handleAddToCart(item)}
+                      disabled={isOutOfStock}
                     >
-                      <MaterialIcons name="add-shopping-cart" size={18} color="#FFFFFF" />
-                      <Text style={styles.addCartText}>إضافة للعرض بالسلة</Text>
+                      <MaterialIcons name="add-shopping-cart" size={18} color={isOutOfStock ? "#75786E" : "#FFFFFF"} />
+                      <Text style={[styles.addCartText, isOutOfStock && { color: '#75786E' }]}>
+                        {isOutOfStock ? 'غير متوفر' : 'إضافة للعرض بالسلة'}
+                      </Text>
                     </TouchableOpacity>
                   ) : (
                     <View style={styles.qtyControlRow}>
@@ -588,5 +598,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
     color: '#1F1B13',
+  },
+  outOfStockOverlay: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(186, 26, 26, 0.8)',
+    paddingVertical: 4,
+    alignItems: 'center',
+    transform: [{ rotate: '-10deg' }],
+  },
+  outOfStockText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });

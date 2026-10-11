@@ -6,12 +6,17 @@ import Toast from 'react-native-toast-message';
 import { toastConfig } from '../components/toast-config';
 import GlobalCartProgress from '../components/global-cart-progress';
 import { registerForPushNotificationsAsync, setupNotificationListeners, syncFcmTokenWithServer, getFcmToken } from '../services/fcm';
+import { loadSavedAuthToken } from '../services/api';
 
 // Keep the splash screen visible while we load resources
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const onLayoutReady = useCallback(async () => {
+    const token = await loadSavedAuthToken();
+    if (!token) {
+      router.replace('/login');
+    }
     // Small delay to ensure the first screen is fully rendered
     await new Promise(resolve => setTimeout(resolve, 1500));
     await SplashScreen.hideAsync();

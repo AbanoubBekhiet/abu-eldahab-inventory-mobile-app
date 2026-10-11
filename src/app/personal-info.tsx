@@ -56,9 +56,9 @@ export default function PersonalInfoScreen() {
           setShopName(user.profile.shop_name || '');
           setPhone(user.profile.phone_number || '');
           setAddress(user.profile.address || '');
-          setLatitude(user.profile.latitude || null);
-          setLongitude(user.profile.longitude || null);
-          setRegionId(user.profile.region_id || null);
+          setLatitude(user.profile.latitude ? Number(user.profile.latitude) : null);
+          setLongitude(user.profile.longitude ? Number(user.profile.longitude) : null);
+          setRegionId(user.profile.region_id ? Number(user.profile.region_id) : null);
         }
       }
     } catch (error) {
