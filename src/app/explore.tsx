@@ -411,7 +411,16 @@ export default function ShopExploreScreen() {
 
           return (
             <View style={[styles.productCard, { width: '48%', marginBottom: 0 }]}>
-              <View style={styles.imageContainer}>
+              {/* Card Header: Unit Badge & Favorite Heart Button above the image */}
+              <View style={styles.cardHeaderRow}>
+                {item.unit ? (
+                  <View style={styles.unitBadge}>
+                    <Text style={styles.unitBadgeText} numberOfLines={1}>
+                      {item.unit}{item.number_of_items_in_unit && item.number_of_items_in_unit > 1 ? ` (${item.number_of_items_in_unit} قطعة)` : ''}
+                    </Text>
+                  </View>
+                ) : <View style={{ width: 1 }} />}
+
                 <TouchableOpacity
                   style={styles.heartBtn}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -423,7 +432,9 @@ export default function ShopExploreScreen() {
                     color={isFav ? "#BA1A1A" : "#75786E"}
                   />
                 </TouchableOpacity>
+              </View>
 
+              <View style={styles.imageContainer}>
                 {item.max_app_order_quantity ? (
                   <View style={styles.limitBadge}>
                     <Text style={styles.limitBadgeText} numberOfLines={1}>
@@ -436,14 +447,6 @@ export default function ShopExploreScreen() {
                   <View style={styles.offerDiscountBadge}>
                     <Text style={styles.offerDiscountText}>
                       -{item.active_offer?.discount_percentage}%
-                    </Text>
-                  </View>
-                ) : null}
-
-                {item.unit ? (
-                  <View style={styles.unitBadge}>
-                    <Text style={styles.unitBadgeText} numberOfLines={1}>
-                      {item.unit}{item.number_of_items_in_unit && item.number_of_items_in_unit > 1 ? ` (${item.number_of_items_in_unit} قطعة)` : ''}
                     </Text>
                   </View>
                 ) : null}
@@ -616,6 +619,14 @@ const styles = StyleSheet.create({
     borderColor: '#EAE1D5',
     marginBottom: 14,
   },
+  cardHeaderRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    width: '100%',
+    minHeight: 28,
+  },
   imageContainer: {
     width: '100%',
     height: 120,
@@ -626,28 +637,24 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heartBtn: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: '#FBF2E5',
+    borderWidth: 1,
+    borderColor: '#EAE1D5',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
   },
   unitBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 7,
+    backgroundColor: '#EBF5E0',
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#EAE1D5',
-    zIndex: 10,
+    borderColor: '#D4EAB7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   unitBadgeText: {
     fontSize: 10,

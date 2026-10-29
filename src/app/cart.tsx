@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import MobileFooterNav from '../components/mobile-footer';
 import {
@@ -26,6 +27,8 @@ import {
 import { AppImage } from '../components/app-image';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 
+const CART_NOTES_STORAGE_KEY = 'cart_delivery_notes';
+
 export default function CartScreen() {
   useRoleGuard('customer');
   const router = useRouter();
@@ -36,9 +39,27 @@ export default function CartScreen() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [userProfile, setUserProfile] = useState<User | null>(null);
 
-  useEffect(() => {
-    loadRealCart();
-  }, []);
+  // Load saved delivery notes from local AsyncStorage
+  const loadSavedNotes = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(CART_NOTES_STORAGE_KEY);
+      if (saved !== null) {
+        setNotes(saved);
+      }
+    } catch (e) {}
+  };
+
+  const handleNotesChange = (text: string) => {
+    setNotes(text);
+    AsyncStorage.setItem(CART_NOTES_STORAGE_KEY, text).catch(() => {});
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadRealCart();
+      loadSavedNotes();
+    }, [])
+  );
 
   const loadRealCart = async () => {
     setLoading(true);
@@ -113,6 +134,8 @@ export default function CartScreen() {
 
       await placeCustomerOrder(itemsPayload, notes || 'طلب خردوات ومنظفات وورقيات عبر التطبيق');
       await clearCart();
+      await AsyncStorage.removeItem(CART_NOTES_STORAGE_KEY).catch(() => {});
+      setNotes('');
       setCartItems([]);
       setOrderSuccess(true);
     } catch (e: any) {
@@ -240,7 +263,7 @@ export default function CartScreen() {
                 style={styles.notesInput}
                 placeholder="أضف ملاحظات للموزع أو سائق الشحن..."
                 value={notes}
-                onChangeText={setNotes}
+                onChangeText={handleNotesChange}
                 multiline
                 placeholderTextColor="#75786E"
               />

@@ -440,7 +440,7 @@ export default function MobileHomeScreen() {
 									onPress={() => router.push({ pathname: '/explore', params: { categoryId: 'all' } })}
 								>
 									<View style={styles.categoryIconCircle}>
-										<MaterialIcons name="shopping-basket" size={24} color="#2D3C1F" />
+										<MaterialIcons name="shopping-basket" size={32} color="#2D3C1F" />
 									</View>
 									<Text style={styles.categoryItemLabel}>الكل</Text>
 								</TouchableOpacity>
@@ -458,7 +458,7 @@ export default function MobileHomeScreen() {
 											uri={cat.image_url}
 											style={styles.categoryIconCircle}
 											iconName="shopping-basket"
-											iconSize={40}
+											iconSize={48}
 										/>
 										<Text style={styles.categoryItemLabel} numberOfLines={1}>{cat.name}</Text>
 									</TouchableOpacity>
@@ -511,7 +511,16 @@ export default function MobileHomeScreen() {
 
 					return (
 						<View style={[styles.productCard, { width: "48%", marginBottom: 0 }]}>
-							<View style={styles.imagePlaceholder}>
+							{/* Card Header: Unit Badge & Favorite Heart Button above the image */}
+							<View style={styles.cardHeaderRow}>
+								{item.unit ? (
+									<View style={styles.unitBadge}>
+										<Text style={styles.unitBadgeText} numberOfLines={1}>
+											{item.unit}{item.number_of_items_in_unit && item.number_of_items_in_unit > 1 ? ` (${item.number_of_items_in_unit} قطعة)` : ''}
+										</Text>
+									</View>
+								) : <View style={{ width: 1 }} />}
+
 								<TouchableOpacity
 									style={styles.heartButton}
 									hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -523,15 +532,9 @@ export default function MobileHomeScreen() {
 										color={isFav ? "#BA1A1A" : "#75786E"}
 									/>
 								</TouchableOpacity>
+							</View>
 
-								{item.unit ? (
-									<View style={styles.unitBadge}>
-										<Text style={styles.unitBadgeText} numberOfLines={1}>
-											{item.unit}{item.number_of_items_in_unit && item.number_of_items_in_unit > 1 ? ` (${item.number_of_items_in_unit} قطعة)` : ''}
-										</Text>
-									</View>
-								) : null}
-
+							<View style={styles.imagePlaceholder}>
 								<AppImage
 									uri={item.image_url}
 									style={[styles.productImage, isOutOfStock && { opacity: 0.4 }]}
@@ -735,31 +738,33 @@ const styles = StyleSheet.create({
 	},
 	categoriesContainer: {
 		paddingHorizontal: 20,
-		gap: 16,
 		flexDirection: "row-reverse",
 		flexWrap: "wrap",
 		justifyContent: "space-between",
+		rowGap: 14,
 	},
 	categoryItem: {
 		alignItems: "center",
-		width: "46%",
+		width: "48%",
+		marginBottom: 4,
 	},
 	categoryItemActive: {},
 	categoryIconCircle: {
-		width: 90,
-		height: 90,
-		borderRadius: 45,
+		width: "100%",
+		height: 115,
+		borderRadius: 18,
 		backgroundColor: "#FBF2E5",
 		borderWidth: 1,
 		borderColor: "#EAE1D5",
 		alignItems: "center",
 		justifyContent: "center",
-		marginBottom: 6,
+		marginBottom: 8,
+		overflow: "hidden",
 	},
 	categoryItemLabel: {
-		fontSize: 11,
-		fontWeight: "600",
-		color: "#45483F",
+		fontSize: 13,
+		fontWeight: "700",
+		color: "#1F1B13",
 		textAlign: "center",
 	},
 	mainScrollView: {
@@ -781,6 +786,14 @@ const styles = StyleSheet.create({
 		borderColor: "#EAE1D5",
 		marginBottom: 14,
 	},
+	cardHeaderRow: {
+		flexDirection: "row-reverse",
+		justifyContent: "space-between",
+		alignItems: "center",
+		marginBottom: 8,
+		width: "100%",
+		minHeight: 28,
+	},
 	imagePlaceholder: {
 		width: "100%",
 		height: 120,
@@ -793,28 +806,24 @@ const styles = StyleSheet.create({
 		overflow: "hidden",
 	},
 	heartButton: {
-		position: "absolute",
-		top: 6,
-		left: 6,
 		width: 28,
 		height: 28,
 		borderRadius: 14,
-		backgroundColor: "rgba(255, 255, 255, 0.9)",
+		backgroundColor: "#FBF2E5",
+		borderWidth: 1,
+		borderColor: "#EAE1D5",
 		alignItems: "center",
 		justifyContent: "center",
-		zIndex: 10,
 	},
 	unitBadge: {
-		position: "absolute",
-		top: 6,
-		right: 6,
-		backgroundColor: "rgba(255, 255, 255, 0.95)",
-		paddingHorizontal: 7,
+		backgroundColor: "#EBF5E0",
+		paddingHorizontal: 8,
 		paddingVertical: 3,
 		borderRadius: 8,
 		borderWidth: 1,
-		borderColor: "#EAE1D5",
-		zIndex: 10,
+		borderColor: "#D4EAB7",
+		alignItems: "center",
+		justifyContent: "center",
 	},
 	unitBadgeText: {
 		fontSize: 10,
