@@ -38,11 +38,11 @@ export default function MobileFooterNav({ cartCount = 0, wishlistCount = 0, isAd
   ];
 
   const adminNavItems: NavItem[] = [
-    { key: 'admin-orders', label: 'الطلبات', icon: 'receipt-long', path: '/admin', badge: pendingOrdersCount },
+    { key: 'admin-home', label: 'الرئيسية', icon: 'dashboard', path: '/admin' },
+    { key: 'admin-carts', label: 'السلال', icon: 'shopping-cart', path: '/admin/active-carts' },
+    { key: 'admin-orders', label: 'الطلبات', icon: 'receipt-long', path: '/admin/orders', badge: pendingOrdersCount },
     { key: 'admin-products', label: 'المنتجات', icon: 'inventory', path: '/admin/products' },
-    { key: 'admin-offers', label: 'العروض', icon: 'local-offer', path: '/admin/offers' },
     { key: 'admin-customers', label: 'الحسابات', icon: 'account-balance-wallet', path: '/admin/customers' },
-    { key: 'admin-app-users', label: 'المستخدمين', icon: 'people', path: '/admin/app-users' },
   ];
 
   const navItems = isAdminRoute ? adminNavItems : customerNavItems;

@@ -829,8 +829,8 @@ export async function fetchUserAccount(): Promise<UserAccountData | null> {
 
 export function isAdminOrSubAdmin(user?: User | null | any): boolean {
   if (!user) return false;
-  const role = String(user.role || '').toLowerCase();
-  return ['admin', 'sub_admin'].includes(role);
+  const role = String(user.role || '').toLowerCase().trim();
+  return ['admin', 'sub_admin', 'subadmin', 'sub-admin'].includes(role);
 }
 
 // Update product price or availability on server
@@ -1312,5 +1312,272 @@ export async function deleteAppUserCartItem(userId: number, productId: number): 
   } catch (error: any) {
     console.error('deleteAppUserCartItem error:', error);
     return { success: false, message: error.message || 'Connection error' };
+  }
+}
+
+// Active Carts Types & API Functions
+export interface ActiveCartUser {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  shop_name: string;
+  address: string;
+  region: string;
+  region_id: number | null;
+  category_of_place: string;
+  registered_from_app: boolean;
+}
+
+export interface ActiveCartItem {
+  id: number;
+  name: string;
+  price: number;
+  original_price: number;
+  has_offer: boolean;
+  image_url: string | null;
+  quantity: string | number;
+  unit: string;
+  subtotal: number;
+}
+
+export interface ActiveCartRegionLimits {
+  region_name: string;
+  min_order_total: number;
+  min_products_count: number;
+  remaining_total: number;
+  remaining_products_count: number;
+  is_limit_met: boolean;
+  has_limits: boolean;
+}
+
+export interface ActiveCartEntry {
+  user: ActiveCartUser;
+  region_limits?: ActiveCartRegionLimits;
+  last_added_date: string;
+  items_count: number;
+  total_quantity: number;
+  total_price: number;
+  items: ActiveCartItem[];
+}
+
+export async function fetchActiveCarts(
+  search?: string,
+  regionId?: string | number
+): Promise<ActiveCartEntry[]> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const query = new URLSearchParams();
+    if (search && search.trim()) query.append('search', search.trim());
+    if (regionId && regionId !== 'all') query.append('region_id', String(regionId));
+
+    const url = `${API_BASE_URL}/active-carts?${query.toString()}`;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const carts: ActiveCartEntry[] = data.active_carts?.data || [];
+
+    // Check if any cart user is missing region or details
+    const needsEnrichment = carts.some(
+      (c) => !c.user?.region || c.user.region === '—' || c.user.region === 'غير محددة' || !c.user?.region_id
+    );
+
+    if (needsEnrichment && carts.length > 0) {
+      try {
+        const [appUsersRes, customersRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/app-users?per_page=100`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/customers?per_page=100&source=all`, { headers }).catch(() => null),
+        ]);
+
+        const userMetaMap = new Map<number, { region?: string; region_id?: number; address?: string; shop_name?: string }>();
+
+        if (appUsersRes && appUsersRes.ok) {
+          const auData = await appUsersRes.json();
+          const auList = auData.users?.data || [];
+          auList.forEach((u: any) => {
+            if (u.id) {
+              userMetaMap.set(Number(u.id), {
+                region: u.region && u.region !== '—' ? u.region : undefined,
+                address: u.address && u.address !== '—' ? u.address : undefined,
+                shop_name: u.shop_name && u.shop_name !== '—' ? u.shop_name : undefined,
+              });
+            }
+          });
+        }
+
+        if (customersRes && customersRes.ok) {
+          const cData = await customersRes.json();
+          const cList = cData.customers?.data || [];
+          cList.forEach((u: any) => {
+            if (u.id) {
+              const existing = userMetaMap.get(Number(u.id)) || {};
+              userMetaMap.set(Number(u.id), {
+                region: u.region && u.region !== '—' ? u.region : existing.region,
+                region_id: u.region_id || existing.region_id,
+                address: u.address && u.address !== '—' ? u.address : existing.address,
+                shop_name: u.shop_name && u.shop_name !== '—' ? u.shop_name : existing.shop_name,
+              });
+            }
+          });
+        }
+
+        // Apply metadata to carts
+        carts.forEach((c) => {
+          const meta = userMetaMap.get(Number(c.user.id));
+          if (meta) {
+            if (!c.user.region || c.user.region === '—' || c.user.region === 'غير محددة') {
+              c.user.region = meta.region || c.user.region;
+            }
+            if (!c.user.region_id && meta.region_id) {
+              c.user.region_id = meta.region_id;
+            }
+            if (!c.user.address || c.user.address === '—') {
+              c.user.address = meta.address || c.user.address;
+            }
+            if (!c.user.shop_name || c.user.shop_name === '—') {
+              c.user.shop_name = meta.shop_name || c.user.shop_name;
+            }
+          }
+        });
+
+        // Second pass: for any cart that STILL has no region, do a targeted search by customer phone or name
+        const unresolvedCarts = carts.filter(
+          (c) => !c.user.region || c.user.region === '—' || c.user.region === 'غير محددة'
+        );
+
+        if (unresolvedCarts.length > 0) {
+          await Promise.all(
+            unresolvedCarts.map(async (c) => {
+              try {
+                const queryStr = (c.user.phone && c.user.phone !== '—') ? c.user.phone : c.user.name;
+                if (!queryStr) return;
+                const custSearchRes = await fetch(`${API_BASE_URL}/customers?search=${encodeURIComponent(queryStr.trim())}`, { headers });
+                if (custSearchRes.ok) {
+                  const searchData = await custSearchRes.json();
+                  const found = (searchData.customers?.data || []).find((u: any) => Number(u.id) === Number(c.user.id)) || searchData.customers?.data?.[0];
+                  if (found) {
+                    if (found.region && found.region !== '—') c.user.region = found.region;
+                    if (found.region_id) c.user.region_id = found.region_id;
+                    if (found.address && found.address !== '—') c.user.address = found.address;
+                    if (found.shop_name && found.shop_name !== '—') c.user.shop_name = found.shop_name;
+                  }
+                }
+              } catch (e) {}
+            })
+          );
+        }
+
+        // Third pass: if customer address or shop_name mentions a known region (e.g. البيطاش, الهانوفيل)
+        const regionsRes = await fetch(`${API_BASE_URL}/regions`, { headers }).catch(() => null);
+        if (regionsRes && regionsRes.ok) {
+          const regJson = await regionsRes.json();
+          const regionList: Region[] = Array.isArray(regJson.data) ? regJson.data : [];
+          carts.forEach((c) => {
+            if (!c.user.region || c.user.region === '—' || c.user.region === 'غير محددة') {
+              const fullText = `${c.user.address || ''} ${c.user.shop_name || ''} ${c.user.name || ''}`;
+              const matched = regionList.find((r) => r.name && fullText.includes(r.name));
+              if (matched) {
+                c.user.region = matched.name;
+                c.user.region_id = matched.id;
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Enrichment error in fetchActiveCarts:', e);
+      }
+    }
+
+    return carts;
+  } catch (error) {
+    console.error('fetchActiveCarts error:', error);
+    return [];
+  }
+}
+
+export async function updateActiveCartItemQty(
+  userId: number,
+  productId: number,
+  payload: { quantity?: number; delta?: number }
+): Promise<{ success: boolean; message: string; quantity?: number }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const url = `${API_BASE_URL}/app-users/${userId}/cart/${productId}`;
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    return {
+      success: res.ok && data.success,
+      message: data.message || (res.ok ? 'تم التحديث بنجاح' : 'فشل التحديث'),
+      quantity: data.quantity,
+    };
+  } catch (error: any) {
+    console.error('updateActiveCartItemQty error:', error);
+    return { success: false, message: error.message || 'خطأ في الاتصال' };
+  }
+}
+
+export async function clearActiveCart(userId: number): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const url = `${API_BASE_URL}/app-users/${userId}/cart`;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { method: 'DELETE', headers });
+    const data = await res.json();
+    return { success: res.ok && data.success, message: data.message || 'تم تفريغ السلة بنجاح' };
+  } catch (error: any) {
+    console.error('clearActiveCart error:', error);
+    return { success: false, message: error.message || 'خطأ في الاتصال' };
+  }
+}
+
+export async function checkoutActiveCart(userId: number): Promise<{ success: boolean; message: string; order_id?: number }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const url = `${API_BASE_URL}/app-users/${userId}/cart/checkout`;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { method: 'POST', headers });
+    const data = await res.json();
+    return {
+      success: res.ok && data.success,
+      message: data.message || (res.ok ? 'تم إتمام الطلب بنجاح' : 'فشل إتمام الطلب'),
+      order_id: data.order_id,
+    };
+  } catch (error: any) {
+    console.error('checkoutActiveCart error:', error);
+    return { success: false, message: error.message || 'خطأ في الاتصال' };
+  }
+}
+
+export async function searchProductsForCart(search: string): Promise<Product[]> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    const url = `${API_BASE_URL}/products?search=${encodeURIComponent(search)}`;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.products?.data || [];
+  } catch (error) {
+    console.error('searchProductsForCart error:', error);
+    return [];
   }
 }

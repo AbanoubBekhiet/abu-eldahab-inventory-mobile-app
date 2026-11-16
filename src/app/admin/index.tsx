@@ -3,44 +3,63 @@ import {
   StyleSheet,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
   ScrollView,
   RefreshControl,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import {
-  fetchAdminOrdersPaginated,
-  updateOrderStatus,
+  fetchUserProfile,
+  fetchPendingOrdersCount,
+  fetchActiveCarts,
   logoutCustomer,
-  Order,
-  OrderStatus,
-  ORDER_STATUS_LABELS,
+  User,
 } from '../../services/api';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import MobileFooterNav from '../../components/mobile-footer';
 
-export default function AdminDashboardScreen() {
+export default function AdminHubScreen() {
   useRoleGuard('admin');
   const router = useRouter();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedFilter, setSelectedFilter] = useState<OrderStatus | 'all'>(OrderStatus.PENDING);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [nextPage, setNextPage] = useState<number | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [pendingOrders, setPendingOrders] = useState<number>(0);
+  const [activeCartsCount, setActiveCartsCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const handleLogout = async () => {
-    Alert.alert('تسجيل الخروج', 'هل أنت تأكد من تسجيل الخروج؟', [
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const [userProfile, ordersCount, carts] = await Promise.all([
+        fetchUserProfile(),
+        fetchPendingOrdersCount(),
+        fetchActiveCarts(),
+      ]);
+      if (userProfile) setUser(userProfile);
+      setPendingOrders(ordersCount || 0);
+      setActiveCartsCount(Array.isArray(carts) ? carts.length : 0);
+    } catch (e) {
+      console.warn('Admin Dashboard Load Error:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadDashboardData();
+  };
+
+  const handleLogout = () => {
+    Alert.alert('تسجيل الخروج', 'هل أنت متأكد من رغبتك في تسجيل الخروج؟', [
       { text: 'إلغاء', style: 'cancel' },
       {
         text: 'تسجيل الخروج',
@@ -53,329 +72,162 @@ export default function AdminDashboardScreen() {
     ]);
   };
 
-  useEffect(() => {
-    loadOrders(1);
-  }, []);
-
-  const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadOrders(1, selectedFilter);
-    setRefreshing(false);
-  }, [selectedFilter]);
-
-  const loadOrders = async (pageToLoad: number = 1, status: string = selectedFilter) => {
-    if (pageToLoad === 1) setLoading(true);
-    else setLoadingMore(true);
-
-    try {
-      const res = await fetchAdminOrdersPaginated(pageToLoad, status);
-      if (pageToLoad === 1) {
-        setOrders(res.orders);
-      } else {
-        setOrders((prev) => [...prev, ...res.orders]);
-      }
-      setNextPage(res.nextPage);
-    } catch (e) {
-      if (pageToLoad === 1) setOrders([]);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
-
-  useEffect(() => {
-    loadOrders(1, selectedFilter);
-  }, [selectedFilter]);
-
-  const handleLoadMore = () => {
-    if (!loadingMore && nextPage !== null) {
-      loadOrders(nextPage, selectedFilter);
-    }
-  };
-
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case OrderStatus.CONFIRMED:
-        return { color: '#166534', bg: '#DCFCE7', label: ORDER_STATUS_LABELS[OrderStatus.CONFIRMED] };
-      case OrderStatus.SHIPPED:
-        return { color: '#1E40AF', bg: '#DBEAFE', label: ORDER_STATUS_LABELS[OrderStatus.SHIPPED] };
-      case OrderStatus.DELIVERED:
-        return { color: '#2D3C1F', bg: '#D4EAB7', label: ORDER_STATUS_LABELS[OrderStatus.DELIVERED] };
-      case OrderStatus.CANCELLED:
-        return { color: '#991B1B', bg: '#FEE2E2', label: ORDER_STATUS_LABELS[OrderStatus.CANCELLED] };
-      case OrderStatus.PENDING:
-      default:
-        return { color: '#92400E', bg: '#FEF3C7', label: ORDER_STATUS_LABELS[OrderStatus.PENDING] };
-    }
-  };
-
-  const filterOrders = orders.filter((ord) => {
-    const name = (ord as any).customer || ord.customer_name || '';
-    const ordId = String(ord.id || '');
-    const ordNum = String(ord.order_number || '');
-    const matchesSearch =
-      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ordId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ordNum.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
-
-  const handleUpdateStatus = async (orderId: string | number, newStatus: string) => {
-    setUpdatingStatus(true);
-    try {
-      await updateOrderStatus(orderId, newStatus);
-      const info = getStatusColor(newStatus);
-      setOrders((prev) =>
-        prev.map((o) =>
-          String(o.id) === String(orderId)
-            ? { ...o, status: newStatus, status_label: info.label }
-            : o
-        )
-      );
-      setSelectedOrderForStatus(null);
-    } catch (e) {
-      Alert.alert('خطأ', 'تعذر تحديث حالة الطلب');
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
-  const handlePromptChangeStatus = (ord: Order) => {
-    setSelectedOrderForStatus(ord);
-  };
-
-  const renderOrderItem = useCallback(({ item: ord }: { item: Order }) => {
-    const statusInfo = getStatusColor(ord.status);
-    const amount = Number(ord.total_amount || ord.total || 0).toFixed(2);
-    const custName = (ord as any).customer || ord.customer_name || 'عميل المتجر';
-
-    return (
-      <View style={styles.orderCard}>
-        <View style={styles.cardHeader}>
-          <TouchableOpacity
-            style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}
-            onPress={() => handlePromptChangeStatus(ord)}
-          >
-            <MaterialIcons name="edit" size={12} color={statusInfo.color} />
-            <Text style={[styles.statusBadgeText, { color: statusInfo.color }]}>
-              {ord.status_label || statusInfo.label}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.orderTitleBox}>
-            <Text style={styles.orderId}>#{ord.order_number || ord.id}</Text>
-            <Text style={styles.customerName}>{custName}</Text>
-          </View>
-        </View>
-
-        <View style={styles.cardDivider} />
-
-        <View style={styles.cardBody}>
-          <View style={styles.bodyColRight}>
-            <Text style={styles.bodyLabel}>تاريخ الطلب</Text>
-            <Text style={styles.bodyValue}>{ord.date || ord.created_at || 'اليوم'}</Text>
-          </View>
-
-          <View style={styles.bodyColLeft}>
-            <Text style={styles.bodyLabel}>المبلغ الإجمالي</Text>
-            <Text style={styles.totalValue}>{amount} ج.م</Text>
-          </View>
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={styles.detailsBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/admin/order-details',
-                params: { id: ord.id, orderData: JSON.stringify(ord) },
-              } as any)
-            }
-          >
-            <MaterialIcons name="visibility" size={18} color="#1F1B13" />
-            <Text style={styles.detailsBtnText}>التفاصيل</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.processBtn}
-            onPress={() => handlePromptChangeStatus(ord)}
-          >
-            <MaterialIcons name="swap-horiz" size={18} color="#FFFFFF" />
-            <Text style={styles.processBtnText}>تغيير الحالة</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }, []);
+  const navLinks = [
+    {
+      id: 'active-carts',
+      title: 'السلال النشطة',
+      subtitle: 'متابعة سلال العملاء وتعديل الكميات وإتمام الطلب',
+      icon: 'shopping-cart',
+      route: '/admin/active-carts',
+      badge: activeCartsCount > 0 ? `${activeCartsCount} سلة` : undefined,
+      color: '#2E5A44',
+      bgColor: '#EEF4F1',
+      borderColor: '#D0E2D8',
+    },
+    {
+      id: 'orders',
+      title: 'إدارة الطلبات',
+      subtitle: 'استعراض الطلبات، متابعة الحالات، وتفاصيل الفواتير',
+      icon: 'receipt-long',
+      route: '/admin/orders',
+      badge: pendingOrders > 0 ? `${pendingOrders} قيد الانتظار` : undefined,
+      color: '#B45309',
+      bgColor: '#FFFBEB',
+      borderColor: '#FDE68A',
+    },
+    {
+      id: 'products',
+      title: 'إدارة المنتجات',
+      subtitle: 'تعديل أسعار المنتجات والمخزون وحالة التوفر',
+      icon: 'inventory',
+      route: '/admin/products',
+      color: '#1D4ED8',
+      bgColor: '#EFF6FF',
+      borderColor: '#BFDBFE',
+    },
+    {
+      id: 'offers',
+      title: 'العروض والخصومات',
+      subtitle: 'إضافة العروض الحصرية وتحديد فترات التخفيض',
+      icon: 'local-offer',
+      route: '/admin/offers',
+      color: '#7C3AED',
+      bgColor: '#F5F3FF',
+      borderColor: '#DDD6FE',
+    },
+    {
+      id: 'customers',
+      title: 'حسابات العملاء والديون',
+      subtitle: 'كشوف الحسابات، تحصيل الديون، وتسجيل الدفعات',
+      icon: 'account-balance-wallet',
+      route: '/admin/customers',
+      color: '#047857',
+      bgColor: '#ECFDF5',
+      borderColor: '#A7F3D0',
+    },
+    {
+      id: 'app-users',
+      title: 'مستخدمو التطبيق',
+      subtitle: 'سجل العملاء المسجلين والتحكم في صلاحياتهم',
+      icon: 'people',
+      route: '/admin/app-users',
+      color: '#4338CA',
+      bgColor: '#EEF2FF',
+      borderColor: '#C7D2FE',
+    },
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Admin Top Header */}
-      <View style={styles.topAppBar}>
-        <TouchableOpacity style={styles.iconBtn} onPress={handleLogout}>
-          <MaterialIcons name="logout" size={22} color="#BA1A1A" />
+      {/* Top Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <MaterialIcons name="logout" size={20} color="#BA1A1A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>إدارة الطلبات</Text>
-        <View style={{ width: 32 }} />
+        <View style={styles.headerTitleBox}>
+          <Text style={styles.headerTitle}>لوحة التحكم الرئيسية</Text>
+          <Text style={styles.headerSubtitle}>
+            {user?.name ? `مرحباً، ${user.name}` : 'إدارة متجر أبو الدهب'}
+          </Text>
+        </View>
+        <View style={styles.adminBadge}>
+          <MaterialIcons name="admin-panel-settings" size={20} color="#2E5A44" />
+        </View>
       </View>
 
-      <View style={styles.contentWrapper}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2E5A44']} />
+        }
+      >
+        {/* Quick Stats Overview */}
+        <View style={styles.statsContainer}>
+          <TouchableOpacity
+            style={[styles.statBox, { borderColor: '#D0E2D8', backgroundColor: '#EEF4F1' }]}
+            onPress={() => router.push('/admin/active-carts')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.statIconBox}>
+              <MaterialIcons name="shopping-cart" size={22} color="#2E5A44" />
+            </View>
+            <Text style={styles.statNumber}>{activeCartsCount}</Text>
+            <Text style={styles.statLabel}>سلال نشطة حالياً</Text>
+          </TouchableOpacity>
 
-        {/* Search Input */}
-        <View style={styles.searchBox}>
-          <MaterialIcons name="search" size={20} color="#75786E" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="البحث برقم الطلب أو اسم العميل..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9A978F"
-          />
+          <TouchableOpacity
+            style={[styles.statBox, { borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }]}
+            onPress={() => router.push('/admin/orders')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.statIconBox}>
+              <MaterialIcons name="pending-actions" size={22} color="#B45309" />
+            </View>
+            <Text style={[styles.statNumber, { color: '#B45309' }]}>{pendingOrders}</Text>
+            <Text style={styles.statLabel}>طلبات قيد الانتظار</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Filter Chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipsScrollView}
-          contentContainerStyle={styles.chipsContainer}
-        >
-          {[
-            { key: OrderStatus.PENDING, label: ORDER_STATUS_LABELS[OrderStatus.PENDING] },
-            { key: OrderStatus.CONFIRMED, label: ORDER_STATUS_LABELS[OrderStatus.CONFIRMED] },
-            { key: OrderStatus.SHIPPED, label: ORDER_STATUS_LABELS[OrderStatus.SHIPPED] },
-            { key: OrderStatus.DELIVERED, label: ORDER_STATUS_LABELS[OrderStatus.DELIVERED] },
-            { key: OrderStatus.CANCELLED, label: ORDER_STATUS_LABELS[OrderStatus.CANCELLED] },
-            { key: 'all', label: `الكل (${orders.length})` },
-          ].map((chip) => (
+        {/* Section Title */}
+        <View style={styles.sectionHeader}>
+          <MaterialIcons name="dashboard" size={18} color="#2E5A44" />
+          <Text style={styles.sectionTitle}>أقسام لوحة التحكم</Text>
+        </View>
+
+        {/* Navigation Cards Grid */}
+        <View style={styles.gridContainer}>
+          {navLinks.map((item) => (
             <TouchableOpacity
-              key={chip.key}
+              key={item.id}
               style={[
-                styles.filterChip,
-                selectedFilter === chip.key && styles.filterChipActive,
+                styles.navCard,
+                { backgroundColor: '#FFFFFF', borderColor: '#EAE1D5' },
               ]}
-              onPress={() => setSelectedFilter(chip.key as OrderStatus | 'all')}
+              onPress={() => router.push(item.route as any)}
+              activeOpacity={0.7}
             >
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.filterChipText,
-                  selectedFilter === chip.key && styles.filterChipTextActive,
-                ]}
-              >
-                {chip.label}
-              </Text>
+              <View style={styles.navCardHeader}>
+                <View style={[styles.iconCircle, { backgroundColor: item.bgColor, borderColor: item.borderColor }]}>
+                  <MaterialIcons name={item.icon as any} size={24} color={item.color} />
+                </View>
+                <MaterialIcons name="arrow-back-ios" size={14} color="#9A978F" style={{ transform: [{ rotate: '180deg' }] }} />
+              </View>
+
+              <View style={styles.navCardContent}>
+                <View style={styles.cardTitleRow}>
+                  <Text style={styles.navCardTitle}>{item.title}</Text>
+                  {item.badge && (
+                    <View style={[styles.badgePill, { backgroundColor: item.bgColor, borderColor: item.borderColor }]}>
+                      <Text style={[styles.badgeText, { color: item.color }]}>{item.badge}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.navCardSubtitle}>{item.subtitle}</Text>
+              </View>
             </TouchableOpacity>
           ))}
-        </ScrollView>
-
-        {/* Orders FlatList with Infinite Scrolling */}
-        {loading && !refreshing ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#2D3C1F" />
-          </View>
-        ) : (
-          <FlatList
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2D3C1F"]} />
-            }
-            data={filterOrders}
-            renderItem={renderOrderItem}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.listContainer}
-            showsVerticalScrollIndicator={false}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.4}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <MaterialIcons name="receipt-long" size={48} color="#A8A29E" />
-                <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
-                <Text style={styles.emptySub}>لم يتم العثور على طلبات تطابق هذا التصفية.</Text>
-              </View>
-            }
-            ListFooterComponent={
-              loadingMore ? (
-                <View style={styles.footerLoader}>
-                  <ActivityIndicator size="small" color="#2D3C1F" />
-                </View>
-              ) : null
-            }
-          />
-        )}
-      </View>
-
-      {/* Status Update Modal */}
-      <Modal
-        visible={Boolean(selectedOrderForStatus)}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setSelectedOrderForStatus(null)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setSelectedOrderForStatus(null)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setSelectedOrderForStatus(null)}>
-                <MaterialIcons name="close" size={24} color="#1F1B13" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>تحديث حالة الطلب</Text>
-            </View>
-
-            {selectedOrderForStatus && (
-              <View style={styles.modalBody}>
-                <Text style={styles.modalSubTitle}>
-                  طلب #{selectedOrderForStatus.order_number || selectedOrderForStatus.id}
-                </Text>
-
-                <View style={styles.statusOptionsList}>
-                  {[
-                    OrderStatus.PENDING,
-                    OrderStatus.CONFIRMED,
-                    OrderStatus.SHIPPED,
-                    OrderStatus.DELIVERED,
-                    OrderStatus.CANCELLED,
-                  ].map((stKey) => {
-                    const isCurrent = selectedOrderForStatus.status === stKey;
-                    const colorInfo = getStatusColor(stKey);
-                    return (
-                      <TouchableOpacity
-                        key={stKey}
-                        style={[
-                          styles.statusOptionItem,
-                          isCurrent && { borderColor: colorInfo.color, backgroundColor: colorInfo.bg },
-                        ]}
-                        disabled={updatingStatus}
-                        onPress={() => handleUpdateStatus(selectedOrderForStatus.id, stKey)}
-                      >
-                        {updatingStatus && isCurrent ? (
-                          <ActivityIndicator size="small" color={colorInfo.color} />
-                        ) : (
-                          <MaterialIcons
-                            name={isCurrent ? 'radio-button-checked' : 'radio-button-unchecked'}
-                            size={20}
-                            color={colorInfo.color}
-                          />
-                        )}
-                        <Text style={[styles.statusOptionText, { color: colorInfo.color }]}>
-                          {ORDER_STATUS_LABELS[stKey]}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.cancelModalBtn}
-                  onPress={() => setSelectedOrderForStatus(null)}
-                >
-                  <Text style={styles.cancelModalBtnText}>إلغاء</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        </View>
+      </ScrollView>
 
       <MobileFooterNav isAdmin />
     </SafeAreaView>
@@ -385,322 +237,143 @@ export default function AdminDashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF8F1',
+    backgroundColor: '#FAF9F6',
   },
-  topAppBar: {
-    flexDirection: 'row-reverse',
+  header: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#EAE1D5',
-    backgroundColor: '#FFF8F1',
+    borderBottomColor: '#EAE8E2',
+  },
+  headerTitleBox: {
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#2D3C1F',
+    color: '#1A2D23',
   },
-  iconBtn: {
-    padding: 4,
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#7C7870',
+    marginTop: 2,
   },
-  contentWrapper: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  adminNavContainer: {
-    flexDirection: 'row-reverse',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: '#EAE1D5',
-    marginBottom: 14,
-  },
-  adminTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 16,
-    gap: 6,
-  },
-  adminTabActive: {
-    backgroundColor: '#D4EAB7',
-  },
-  adminTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#75786E',
-  },
-  adminTabTextActive: {
-    color: '#2D3C1F',
-    fontWeight: 'bold',
-  },
-  searchBox: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#EAE1D5',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    height: 48,
-    marginBottom: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
-    color: '#1F1B13',
-    textAlign: 'right',
-    paddingHorizontal: 8,
-  },
-  chipsScrollView: {
-    flexGrow: 0,
-    height: 50,
-    marginBottom: 12,
-  },
-  chipsContainer: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  filterChip: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#EAE1D5',
-    paddingHorizontal: 16,
+  logoutBtn: {
+    width: 38,
     height: 38,
-    borderRadius: 20,
-    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#FDEEEC',
     alignItems: 'center',
-    flexShrink: 0,
+    justifyContent: 'center',
   },
-  filterChipActive: {
-    backgroundColor: '#2D3C1F',
-    borderColor: '#2D3C1F',
+  adminBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#EEF4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  filterChipText: {
-    fontSize: 13,
-    color: '#75786E',
-    fontWeight: '600',
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  filterChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  listContainer: {
-    paddingBottom: 24,
-    gap: 14,
-  },
-  orderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+  scrollContent: {
     padding: 16,
+    paddingBottom: 24,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statBox: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#EAE1D5',
+    alignItems: 'center',
   },
-  cardHeader: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  statIconBox: {
+    marginBottom: 6,
   },
-  orderTitleBox: {
-    alignItems: 'flex-end',
-  },
-  orderId: {
-    fontSize: 11,
-    color: '#75786E',
-  },
-  customerName: {
-    fontSize: 16,
+  statNumber: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#1F1B13',
-    marginTop: 2,
+    color: '#2E5A44',
   },
-  statusBadge: {
+  statLabel: {
+    fontSize: 11,
+    color: '#7C7870',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    gap: 4,
+    gap: 6,
+    marginBottom: 12,
   },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: '#EAE1D5',
-    marginVertical: 12,
-  },
-  cardBody: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  bodyColRight: {
-    alignItems: 'flex-end',
-  },
-  bodyColLeft: {
-    alignItems: 'flex-start',
-  },
-  bodyLabel: {
-    fontSize: 11,
-    color: '#75786E',
-  },
-  bodyValue: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#1F1B13',
-    marginTop: 2,
-  },
-  totalValue: {
+  sectionTitle: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#2D3C1F',
-    marginTop: 2,
+    color: '#1A2D23',
   },
-  cardActions: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  processBtn: {
-    flex: 1,
-    backgroundColor: '#2D3C1F',
-    borderRadius: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  processBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  detailsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FBF2E5',
-    borderWidth: 1,
-    borderColor: '#EAE1D5',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  detailsBtnText: {
-    color: '#1F1B13',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  centerContainer: {
-    paddingVertical: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyContainer: {
-    paddingVertical: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F1B13',
-    marginTop: 12,
-  },
-  emptySub: {
-    fontSize: 12,
-    color: '#75786E',
-    marginTop: 4,
-  },
-  footerLoader: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#EAE1D5',
-    elevation: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3EFEA',
-    paddingBottom: 12,
-    marginBottom: 14,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F1B13',
-  },
-  modalBody: {
+  gridContainer: {
     gap: 12,
   },
-  modalSubTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#75786E',
-    textAlign: 'right',
-    marginBottom: 4,
+  navCard: {
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  statusOptionsList: {
-    gap: 8,
-  },
-  statusOptionItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
+  navCardHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#EAE1D5',
-    backgroundColor: '#FAF7F2',
-  },
-  statusOptionText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  cancelModalBtn: {
-    marginTop: 8,
-    paddingVertical: 12,
     alignItems: 'center',
-    borderRadius: 14,
-    backgroundColor: '#F3EFEA',
+    justifyContent: 'center',
   },
-  cancelModalBtnText: {
-    fontSize: 14,
+  navCardContent: {
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  navCardTitle: {
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#75786E',
+    color: '#1A2D23',
+    textAlign: 'right',
+  },
+  badgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  navCardSubtitle: {
+    fontSize: 12,
+    color: '#7C7870',
+    lineHeight: 18,
+    textAlign: 'right',
   },
 });
