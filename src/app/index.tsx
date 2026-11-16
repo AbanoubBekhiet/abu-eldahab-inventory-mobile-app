@@ -243,13 +243,17 @@ export default function MobileHomeScreen() {
 						image_url: product.image_url,
 						category_name: product.category_name,
 						max_app_order_quantity: product.max_app_order_quantity,
+						is_offer: false,
 					},
 				];
 			}
 		});
 
 		// Persist to storage
-		const updatedCart = await addProductToCart(product, 1);
+		const updatedCart = await addProductToCart(product, 1, {
+			isOffer: false,
+			unitPrice: Number(product.price) || 0,
+		});
 		setCartItems([...updatedCart]);
 		Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
 	};
@@ -562,14 +566,7 @@ export default function MobileHomeScreen() {
 							)}
 
 							<View style={styles.priceRow}>
-								{(item as any).active_offer ? (
-									<View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
-										<Text style={styles.priceText}>{displayPrice} ج.م</Text>
-										<Text style={styles.oldPriceText}>{(item as any).active_offer.original_price}</Text>
-									</View>
-								) : (
-									<Text style={styles.priceText}>{displayPrice} ج.م</Text>
-								)}
+								<Text style={styles.priceText}>{displayPrice} ج.م</Text>
 							</View>
 
 							{qtyInCart === 0 ? (

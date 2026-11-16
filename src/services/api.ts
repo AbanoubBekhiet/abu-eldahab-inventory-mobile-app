@@ -99,6 +99,7 @@ export interface CartItem {
   image_url?: string | null;
   category_name?: string;
   max_app_order_quantity?: number | null;
+  is_offer?: boolean;
 }
 
 export interface OrderItem {
@@ -218,7 +219,11 @@ export async function saveCartItems(items: CartItem[]): Promise<void> {
   // Deprecated: Managed by backend
 }
 
-export async function addProductToCart(product: Product, quantity = 1): Promise<CartItem[]> {
+export async function addProductToCart(
+  product: Product,
+  quantity = 1,
+  options?: { isOffer?: boolean; unitPrice?: number }
+): Promise<CartItem[]> {
   try {
     if (!authToken) {
       alert('يرجى تسجيل الدخول أولاً لإضافة منتجات للسلة');
@@ -231,10 +236,18 @@ export async function addProductToCart(product: Product, quantity = 1): Promise<
       'Authorization': `Bearer ${authToken}`
     };
 
+    const isOffer = options?.isOffer ?? false;
+    const unitPrice = options?.unitPrice ?? (isOffer ? product.price : undefined);
+
     const res = await fetch(`${API_BASE_URL}/cart`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ product_id: product.id, quantity })
+      body: JSON.stringify({
+        product_id: product.id,
+        quantity,
+        is_offer: isOffer,
+        unit_price: unitPrice,
+      })
     });
     if (!res.ok) {
       let data: any = {};
@@ -833,11 +846,24 @@ export function isAdminOrSubAdmin(user?: User | null | any): boolean {
   return ['admin', 'sub_admin', 'subadmin', 'sub-admin'].includes(role);
 }
 
-// Update product price or availability on server
+export interface UpdateProductPayload {
+  name?: string;
+  price?: number;
+  cost_price?: number;
+  stock?: number;
+  unit?: string;
+  number_of_items_in_unit?: number;
+  category_id?: number;
+  description?: string;
+  is_available_on_app?: boolean;
+  max_app_order_quantity?: number | null;
+}
+
+// Update product on server (supports all fields: name, price, stock, category, unit, etc.)
 export async function updateProductOnServer(
   productId: number | string,
-  data: { price?: number; is_available_on_app?: boolean }
-): Promise<boolean> {
+  data: UpdateProductPayload & Record<string, any>
+): Promise<{ success: boolean; product?: Product; message?: string }> {
   try {
     if (!authToken) await loadSavedAuthToken();
     const headers: Record<string, string> = {
@@ -851,10 +877,14 @@ export async function updateProductOnServer(
       headers,
       body: JSON.stringify(data),
     });
-    return res.ok;
+    const resData = await res.json().catch(() => ({}));
+    if (res.ok) {
+      return { success: true, product: resData.product, message: resData.message };
+    }
+    return { success: false, message: resData.message || 'فشل التحديث' };
   } catch (error) {
     console.error('Failed to update product:', error);
-    return false;
+    return { success: false, message: 'حدث خطأ في الاتصال بالسيرفر' };
   }
 }
 

@@ -242,6 +242,11 @@ export default function CartScreen() {
                   <View style={styles.cardRightCol}>
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.name}</Text>
+                      {item.is_offer ? (
+                        <View style={styles.offerBadge}>
+                          <Text style={styles.offerBadgeText}>عرض خاص</Text>
+                        </View>
+                      ) : null}
                       <Text style={styles.itemVariant}>{item.category_name || 'خردوات ومنظفات وورقيات'}</Text>
                     </View>
 
@@ -467,6 +472,19 @@ const styles = StyleSheet.create({
     color: '#75786E',
     marginTop: 2,
     textAlign: 'right',
+  },
+  offerBadge: {
+    backgroundColor: '#FFE2E0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginTop: 3,
+    alignSelf: 'flex-end',
+  },
+  offerBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#BA1A1A',
   },
   itemImage: {
     width: 84,

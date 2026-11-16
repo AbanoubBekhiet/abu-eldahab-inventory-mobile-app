@@ -148,12 +148,16 @@ export default function CustomerOffersScreen() {
             image_url: offer.product?.image_url,
             category_name: offer.product?.category_name,
             max_app_order_quantity: offer.offer_max_quantity ?? offer.product?.max_app_order_quantity,
+            is_offer: true,
           },
         ];
       }
     });
 
-    const updatedCart = await addProductToCart(productForCart, 1);
+    const updatedCart = await addProductToCart(productForCart, 1, {
+      isOffer: true,
+      unitPrice: Number(offer.offer_price) || 0,
+    });
     setCartItems([...updatedCart]);
     Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
   };

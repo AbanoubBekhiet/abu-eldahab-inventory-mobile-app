@@ -139,12 +139,16 @@ export default function WishlistScreen() {
             image_url: product.image_url,
             category_name: product.category_name,
             max_app_order_quantity: product.max_app_order_quantity,
+            is_offer: false,
           },
         ];
       }
     });
 
-    const updatedCart = await addProductToCart(product, 1);
+    const updatedCart = await addProductToCart(product, 1, {
+      isOffer: false,
+      unitPrice: Number(product.price) || 0,
+    });
     setCartItems([...updatedCart]);
     Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
   };

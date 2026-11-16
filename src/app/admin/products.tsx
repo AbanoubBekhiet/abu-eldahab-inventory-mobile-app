@@ -22,12 +22,15 @@ import {
   fetchCategories,
   logoutCustomer,
   updateProductOnServer,
+  UpdateProductPayload,
   Product,
   Category,
 } from '../../services/api';
 import { AppImage } from '../../components/app-image';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import MobileFooterNav from '../../components/mobile-footer';
+
+const PRODUCT_UNITS = ['قطعة', 'علبة', 'كرتونة', 'شكارة', 'شريط', 'دستة', 'لفة'];
 
 export default function AdminProductsScreen() {
   useRoleGuard('admin');
@@ -55,10 +58,21 @@ export default function AdminProductsScreen() {
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Price Edit Modal State
+  // Full Product Edit Modal State
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [editPriceInput, setEditPriceInput] = useState('');
-  const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [updatingProduct, setUpdatingProduct] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    category_id: 0,
+    price: '',
+    cost_price: '',
+    stock: '',
+    unit: 'قطعة',
+    number_of_items_in_unit: '1',
+    max_app_order_quantity: '',
+    description: '',
+    is_available_on_app: true,
+  });
 
   useEffect(() => {
     fetchCategories().then((cats) => setCategories(Array.isArray(cats) ? cats : []));
@@ -109,43 +123,88 @@ export default function AdminProductsScreen() {
       prev.map((p) => (p.id === id ? { ...p, is_available_on_app: newVal } : p))
     );
 
-    const success = await updateProductOnServer(id, { is_available_on_app: newVal });
-    if (!success) {
+    const res = await updateProductOnServer(id, { is_available_on_app: newVal });
+    if (!res.success) {
       // Revert if API failed
       setProducts((prev) =>
         prev.map((p) => (p.id === id ? { ...p, is_available_on_app: currentVal } : p))
       );
-      Alert.alert('خطأ', 'تعذر تحديث حالة توفر المنتج على السيرفر.');
+      Alert.alert('خطأ', res.message || 'تعذر تحديث حالة توفر المنتج على السيرفر.');
     }
   };
 
-  // Open Edit Price Modal
-  const openEditPriceModal = (product: Product) => {
+  // Open Full Product Edit Modal
+  const openEditModal = (product: Product) => {
     setEditingProduct(product);
-    setEditPriceInput(String(product.price || 0));
+    setEditForm({
+      name: product.name || '',
+      category_id: product.category_id || (categories[0]?.id ?? 0),
+      price: product.price !== undefined ? String(product.price) : '',
+      cost_price: product.cost_price !== undefined ? String(product.cost_price) : '',
+      stock: product.stock !== undefined ? String(product.stock) : '0',
+      unit: product.unit || 'قطعة',
+      number_of_items_in_unit: product.number_of_items_in_unit ? String(product.number_of_items_in_unit) : '1',
+      max_app_order_quantity: product.max_app_order_quantity ? String(product.max_app_order_quantity) : '',
+      description: product.description || '',
+      is_available_on_app: Boolean(product.is_available_on_app),
+    });
   };
 
-  // Save new price (real API call)
-  const handleSavePrice = async () => {
+  // Save updated product
+  const handleSaveProduct = async () => {
     if (!editingProduct) return;
-    const newPriceNum = parseFloat(editPriceInput);
-    if (isNaN(newPriceNum) || newPriceNum < 0) {
-      Alert.alert('تنبيه', 'يرجى إدخال سعر صحيح.');
+    if (!editForm.name.trim()) {
+      Alert.alert('تنبيه', 'يرجى إدخال اسم المنتج.');
+      return;
+    }
+    const priceNum = parseFloat(editForm.price);
+    if (isNaN(priceNum) || priceNum < 0) {
+      Alert.alert('تنبيه', 'يرجى إدخال سعر بيع صحيح.');
+      return;
+    }
+    const costPriceNum = editForm.cost_price.trim() !== '' ? parseFloat(editForm.cost_price) : 0;
+    if (isNaN(costPriceNum) || costPriceNum < 0) {
+      Alert.alert('تنبيه', 'يرجى إدخال سعر تكلفة صحيح.');
+      return;
+    }
+    const stockNum = parseFloat(editForm.stock);
+    if (isNaN(stockNum) || stockNum < 0) {
+      Alert.alert('تنبيه', 'يرجى إدخال كمية مخزون صحيحة.');
       return;
     }
 
-    setUpdatingPrice(true);
-    const success = await updateProductOnServer(editingProduct.id, { price: newPriceNum });
-    setUpdatingPrice(false);
+    const payload: UpdateProductPayload = {
+      name: editForm.name.trim(),
+      category_id: editForm.category_id || undefined,
+      price: priceNum,
+      cost_price: costPriceNum,
+      stock: stockNum,
+      unit: editForm.unit,
+      number_of_items_in_unit: parseInt(editForm.number_of_items_in_unit) || 1,
+      max_app_order_quantity: editForm.max_app_order_quantity.trim() !== '' ? parseInt(editForm.max_app_order_quantity) : null,
+      description: editForm.description.trim(),
+      is_available_on_app: editForm.is_available_on_app,
+    };
 
-    if (success) {
+    setUpdatingProduct(true);
+    const res = await updateProductOnServer(editingProduct.id, payload);
+    setUpdatingProduct(false);
+
+    if (res.success) {
+      const selectedCategoryObj = categories.find((c) => c.id === editForm.category_id);
+      const updatedProductData: Partial<Product> = {
+        ...payload,
+        category_name: selectedCategoryObj ? selectedCategoryObj.name : editingProduct.category_name,
+        ...(res.product || {}),
+      };
+
       setProducts((prev) =>
-        prev.map((p) => (p.id === editingProduct.id ? { ...p, price: newPriceNum } : p))
+        prev.map((p) => (p.id === editingProduct.id ? { ...p, ...updatedProductData } : p))
       );
       setEditingProduct(null);
-      Alert.alert('تم بنجاح 🌟', 'تم تعديل سعر المنتج بنجاح!');
+      Alert.alert('تم بنجاح 🌟', 'تم تعديل بيانات المنتج بنجاح!');
     } else {
-      Alert.alert('خطأ', 'فشل تعديل سعر المنتج على السيرفر.');
+      Alert.alert('خطأ', res.message || 'فشل تعديل بيانات المنتج على السيرفر.');
     }
   };
 
@@ -166,6 +225,15 @@ export default function AdminProductsScreen() {
             <Text style={styles.categoryBadgeText}>
               {item.category_name || 'عام'} • {item.unit || 'علبة'}
             </Text>
+            <View style={styles.inventoryInfoRow}>
+              <Text style={styles.inventoryInfoText}>
+                المخزون: <Text style={styles.inventoryInfoBold}>{item.stock} {item.unit || 'وحدة'}</Text>
+              </Text>
+              <Text style={styles.inventoryInfoDot}>•</Text>
+              <Text style={styles.inventoryInfoText}>
+                التكلفة: <Text style={styles.inventoryInfoBold}>{(Number(item.cost_price) || 0).toFixed(2)} ج.م</Text>
+              </Text>
+            </View>
           </View>
 
           <View style={styles.priceTagBox}>
@@ -177,7 +245,7 @@ export default function AdminProductsScreen() {
         {/* Divider Line */}
         <View style={styles.cardDivider} />
 
-        {/* Bottom Section: Availability Switch & Edit Price Button */}
+        {/* Bottom Section: Availability Switch & Edit Product Button */}
         <View style={styles.cardFooterRow}>
           <View style={styles.switchRow}>
             <Switch
@@ -196,15 +264,15 @@ export default function AdminProductsScreen() {
 
           <TouchableOpacity
             style={styles.editPriceBtn}
-            onPress={() => openEditPriceModal(item)}
+            onPress={() => openEditModal(item)}
           >
             <MaterialIcons name="edit" size={15} color="#2D3C1F" />
-            <Text style={styles.editPriceBtnText}>تعديل السعر</Text>
+            <Text style={styles.editPriceBtnText}>تعديل المنتج</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
-  }, []);
+  }, [categories]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -316,47 +384,202 @@ export default function AdminProductsScreen() {
         )}
       </View>
 
-      {/* Edit Price Modal */}
+      {/* Edit Product Modal */}
       <Modal
         visible={Boolean(editingProduct)}
-        animationType="fade"
+        animationType="slide"
         transparent
         onRequestClose={() => setEditingProduct(null)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setEditingProduct(null)}>
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setEditingProduct(null)}>
+              <TouchableOpacity onPress={() => setEditingProduct(null)} style={styles.modalCloseBtn}>
                 <MaterialIcons name="close" size={24} color="#1F1B13" />
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>تعديل سعر المنتج</Text>
+              <Text style={styles.modalTitle}>تعديل بيانات المنتج</Text>
             </View>
 
             {editingProduct && (
-              <View style={styles.modalForm}>
-                <Text style={styles.productNameModal}>{editingProduct.name}</Text>
-                <Text style={styles.fieldLabel}>السعر الجديد (ج.م) *</Text>
+              <ScrollView
+                style={styles.modalScrollView}
+                contentContainerStyle={styles.modalScrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Product Name */}
+                <Text style={styles.fieldLabel}>اسم المنتج *</Text>
                 <TextInput
                   style={styles.fieldInput}
-                  placeholder="0.00"
-                  value={editPriceInput}
-                  onChangeText={setEditPriceInput}
+                  placeholder="اسم المنتج..."
+                  value={editForm.name}
+                  onChangeText={(val) => setEditForm((prev) => ({ ...prev, name: val }))}
+                  placeholderTextColor="#9A978F"
+                />
+
+                {/* Category Selection */}
+                <Text style={styles.fieldLabel}>القسم / التصنيف *</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRowContainer}>
+                  {categories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.chipOption,
+                        editForm.category_id === cat.id && styles.chipOptionActive,
+                      ]}
+                      onPress={() => setEditForm((prev) => ({ ...prev, category_id: cat.id }))}
+                    >
+                      <Text
+                        style={[
+                          styles.chipOptionText,
+                          editForm.category_id === cat.id && styles.chipOptionTextActive,
+                        ]}
+                      >
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                {/* Pricing: Selling Price & Cost Price */}
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <Text style={styles.fieldLabel}>سعر التكلفة (ج.م)</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      placeholder="0.00"
+                      value={editForm.cost_price}
+                      onChangeText={(val) => setEditForm((prev) => ({ ...prev, cost_price: val }))}
+                      keyboardType="numeric"
+                      placeholderTextColor="#9A978F"
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <Text style={styles.fieldLabel}>سعر البيع (ج.م) *</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      placeholder="0.00"
+                      value={editForm.price}
+                      onChangeText={(val) => setEditForm((prev) => ({ ...prev, price: val }))}
+                      keyboardType="numeric"
+                      placeholderTextColor="#9A978F"
+                    />
+                  </View>
+                </View>
+
+                {/* Stock & Items in Unit */}
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <Text style={styles.fieldLabel}>عدد القطع بالوحدة</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      placeholder="1"
+                      value={editForm.number_of_items_in_unit}
+                      onChangeText={(val) => setEditForm((prev) => ({ ...prev, number_of_items_in_unit: val }))}
+                      keyboardType="numeric"
+                      placeholderTextColor="#9A978F"
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <Text style={styles.fieldLabel}>المخزون الحالي *</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      placeholder="0"
+                      value={editForm.stock}
+                      onChangeText={(val) => setEditForm((prev) => ({ ...prev, stock: val }))}
+                      keyboardType="numeric"
+                      placeholderTextColor="#9A978F"
+                    />
+                  </View>
+                </View>
+
+                {/* Unit Picker Chips */}
+                <Text style={styles.fieldLabel}>وحدة القياس *</Text>
+                <View style={styles.unitChipsGrid}>
+                  {PRODUCT_UNITS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[
+                        styles.unitChip,
+                        editForm.unit === u && styles.unitChipActive,
+                      ]}
+                      onPress={() => setEditForm((prev) => ({ ...prev, unit: u }))}
+                    >
+                      <Text
+                        style={[
+                          styles.unitChipText,
+                          editForm.unit === u && styles.unitChipTextActive,
+                        ]}
+                      >
+                        {u}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Max App Order Quantity */}
+                <Text style={styles.fieldLabel}>أقصى كمية طلب للعميل في التطبيق (اختياري)</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="بدون حد أقصى (اتركه فارغاً)"
+                  value={editForm.max_app_order_quantity}
+                  onChangeText={(val) => setEditForm((prev) => ({ ...prev, max_app_order_quantity: val }))}
                   keyboardType="numeric"
                   placeholderTextColor="#9A978F"
                 />
 
-                <TouchableOpacity
-                  style={styles.submitModalBtn}
-                  onPress={handleSavePrice}
-                  disabled={updatingPrice}
-                >
-                  {updatingPrice ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.submitModalText}>حفظ السعر الجديد</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+                {/* Description */}
+                <Text style={styles.fieldLabel}>وصف المنتج (اختياري)</Text>
+                <TextInput
+                  style={[styles.fieldInput, styles.textAreaInput]}
+                  placeholder="اكتب وصفاً أو تفاصيل عن المنتج..."
+                  value={editForm.description}
+                  onChangeText={(val) => setEditForm((prev) => ({ ...prev, description: val }))}
+                  multiline
+                  numberOfLines={3}
+                  placeholderTextColor="#9A978F"
+                />
+
+                {/* Availability Toggle */}
+                <View style={styles.switchBox}>
+                  <View style={styles.switchTextBox}>
+                    <Text style={styles.switchTitle}>إتاحة المنتج في تطبيق العملاء</Text>
+                    <Text style={styles.switchSub}>
+                      {editForm.is_available_on_app
+                        ? 'المنتج متاح ويظهر للعملاء في التطبيق'
+                        : 'المنتج مخفي ولن يظهر للعملاء'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={editForm.is_available_on_app}
+                    onValueChange={(val) => setEditForm((prev) => ({ ...prev, is_available_on_app: val }))}
+                    trackColor={{ false: '#EAE1D5', true: '#D4EAB7' }}
+                    thumbColor={editForm.is_available_on_app ? '#2D3C1F' : '#75786E'}
+                  />
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.modalActionsRow}>
+                  <TouchableOpacity
+                    style={styles.cancelModalBtn}
+                    onPress={() => setEditingProduct(null)}
+                  >
+                    <Text style={styles.cancelModalBtnText}>إلغاء</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.submitModalBtn}
+                    onPress={handleSaveProduct}
+                    disabled={updatingProduct}
+                  >
+                    {updatingProduct ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.submitModalText}>حفظ التعديلات</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             )}
           </Pressable>
         </Pressable>
@@ -449,7 +672,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   chipsContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 4,
@@ -593,16 +816,35 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  inventoryInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 3,
+  },
+  inventoryInfoText: {
+    fontSize: 11,
+    color: '#75786E',
+  },
+  inventoryInfoBold: {
+    fontWeight: 'bold',
+    color: '#2D3C1F',
+  },
+  inventoryInfoDot: {
+    fontSize: 10,
+    color: '#D5D2C4',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalContent: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 420,
+    maxHeight: '90%',
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 20,
@@ -613,28 +855,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F4F0',
+    marginBottom: 12,
+  },
+  modalCloseBtn: {
+    padding: 4,
+    borderRadius: 8,
   },
   modalTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1F1B13',
   },
-  productNameModal: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2D3C1F',
-    textAlign: 'right',
-    marginBottom: 12,
+  modalScrollView: {
+    flexGrow: 1,
   },
-  modalForm: {
-    gap: 12,
+  modalScrollContent: {
+    paddingBottom: 12,
   },
   fieldLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1F1B13',
     textAlign: 'right',
+    marginTop: 10,
+    marginBottom: 6,
   },
   fieldInput: {
     backgroundColor: '#FFF8F1',
@@ -643,17 +890,133 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    fontSize: 15,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '600',
     color: '#1F1B13',
     textAlign: 'right',
   },
-  submitModalBtn: {
+  textAreaInput: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  formCol: {
+    flex: 1,
+  },
+  chipsRowContainer: {
+    flexGrow: 0,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  chipOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 12,
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: '#EAE1D5',
+    marginRight: 8,
+  },
+  chipOptionActive: {
     backgroundColor: '#2D3C1F',
-    borderRadius: 9999,
-    paddingVertical: 12,
+    borderColor: '#2D3C1F',
+  },
+  chipOptionText: {
+    fontSize: 12,
+    color: '#75786E',
+    fontWeight: '600',
+  },
+  chipOptionTextActive: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  unitChipsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  unitChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: '#EAE1D5',
+  },
+  unitChipActive: {
+    backgroundColor: '#D4EAB7',
+    borderColor: '#2D3C1F',
+  },
+  unitChipText: {
+    fontSize: 12,
+    color: '#75786E',
+    fontWeight: '600',
+  },
+  unitChipTextActive: {
+    color: '#2D3C1F',
+    fontWeight: 'bold',
+  },
+  switchBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: '#EAE1D5',
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 14,
+    marginBottom: 16,
+  },
+  switchTextBox: {
+    flex: 1,
+    alignItems: 'flex-end',
+    marginRight: 10,
+  },
+  switchTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#1F1B13',
+  },
+  switchSub: {
+    fontSize: 11,
+    color: '#75786E',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
     marginTop: 8,
+    paddingTop: 8,
+  },
+  cancelModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#F5F4F0',
+    borderWidth: 1,
+    borderColor: '#EAE1D5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelModalBtnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#75786E',
+  },
+  submitModalBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#2D3C1F',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   submitModalText: {
     color: '#FFFFFF',

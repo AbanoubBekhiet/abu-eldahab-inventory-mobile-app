@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -38,6 +38,7 @@ export default function AdminDashboardScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const chipsScrollRef = useRef<ScrollView>(null);
 
   const handleLogout = async () => {
     Alert.alert('تسجيل الخروج', 'هل أنت تأكد من تسجيل الخروج؟', [
@@ -239,10 +240,12 @@ export default function AdminDashboardScreen() {
 
         {/* Filter Chips */}
         <ScrollView
+          ref={chipsScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.chipsScrollView}
           contentContainerStyle={styles.chipsContainer}
+          contentOffset={{ x: 0, y: 0 }}
         >
           {[
             { key: OrderStatus.PENDING, label: ORDER_STATUS_LABELS[OrderStatus.PENDING] },
@@ -466,7 +469,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   chipsContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 4,

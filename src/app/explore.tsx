@@ -187,11 +187,9 @@ export default function ShopExploreScreen() {
     const targetId = Number(product.id);
     const existing = cartItems.find((i) => Number(i.product_id) === targetId);
     const currentQty = existing?.quantity || 0;
-    const maxAllowed = product.active_offer?.offer_max_quantity ?? product.max_app_order_quantity;
+    const maxAllowed = product.max_app_order_quantity;
     const maxAllowedNum = Number(maxAllowed);
-    const effectivePrice = product.active_offer
-      ? Number(product.active_offer.offer_price) || 0
-      : Number(product.price) || 0;
+    const basePrice = Number(product.price) || 0;
 
     // Only enforce limits for customers — admins/sub-admins have no restrictions
     if (!isAdminOrSubAdmin(userProfile)) {
@@ -213,7 +211,7 @@ export default function ShopExploreScreen() {
 
     const productForCart: Product = {
       ...product,
-      price: effectivePrice,
+      price: basePrice,
       max_app_order_quantity: maxAllowed,
     };
 
@@ -237,18 +235,22 @@ export default function ShopExploreScreen() {
             id: targetId,
             product_id: targetId,
             name: product.name,
-            price: effectivePrice,
+            price: basePrice,
             quantity: 1,
             image_url: product.image_url,
             category_name: product.category_name,
             max_app_order_quantity: maxAllowed,
+            is_offer: false,
           },
         ];
       }
     });
 
-    // Persist to storage
-    const updatedCart = await addProductToCart(productForCart, 1);
+    // Persist to storage - normal search/explore adds at base price
+    const updatedCart = await addProductToCart(productForCart, 1, {
+      isOffer: false,
+      unitPrice: basePrice,
+    });
     setCartItems([...updatedCart]);
     Toast.show({ type: 'success', text1: 'السلة', text2: 'تم إضافة المنتج للسلة بنجاح' });
   };
@@ -443,14 +445,6 @@ export default function ShopExploreScreen() {
                   </View>
                 ) : null}
 
-                {hasOffer ? (
-                  <View style={styles.offerDiscountBadge}>
-                    <Text style={styles.offerDiscountText}>
-                      -{item.active_offer?.discount_percentage}%
-                    </Text>
-                  </View>
-                ) : null}
-
                 <AppImage
                   uri={item.image_url}
                   style={[styles.productImage, isOutOfStock && { opacity: 0.4 }]}
@@ -470,18 +464,7 @@ export default function ShopExploreScreen() {
                 {item.name}
               </Text>
 
-              {hasOffer ? (
-                <View style={styles.priceRow}>
-                  <Text style={styles.productPrice}>
-                    {(Number(item.active_offer?.offer_price) || 0).toFixed(2)} ج.م
-                  </Text>
-                  <Text style={styles.oldPriceText}>
-                    {(Number(item.active_offer?.original_price) || Number(item.price)).toFixed(2)} ج.م
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.productPrice}>{(Number(item.price) || 0).toFixed(2)} ج.م</Text>
-              )}
+              <Text style={styles.productPrice}>{(Number(item.price) || 0).toFixed(2)} ج.م</Text>
 
               {/* Add to Cart Button or Stepper Controls */}
               {qtyInCart === 0 ? (
