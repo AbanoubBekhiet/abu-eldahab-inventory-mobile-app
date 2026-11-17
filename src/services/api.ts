@@ -1391,13 +1391,15 @@ export interface ActiveCartEntry {
   items: ActiveCartItem[];
 }
 
-export async function fetchActiveCarts(
+export async function fetchActiveCartsPaginated(
+  page: number = 1,
   search?: string,
   regionId?: string | number
-): Promise<ActiveCartEntry[]> {
+): Promise<{ carts: ActiveCartEntry[]; nextPage: number | null }> {
   try {
     if (!authToken) await loadSavedAuthToken();
     const query = new URLSearchParams();
+    query.append('page', String(page));
     if (search && search.trim()) query.append('search', search.trim());
     if (regionId && regionId !== 'all') query.append('region_id', String(regionId));
 
@@ -1406,9 +1408,10 @@ export async function fetchActiveCarts(
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
     const res = await fetch(url, { headers });
-    if (!res.ok) return [];
+    if (!res.ok) return { carts: [], nextPage: null };
     const data = await res.json();
     const carts: ActiveCartEntry[] = data.active_carts?.data || [];
+    const nextPage: number | null = data.active_carts?.next_page ?? null;
 
     // Check if any cart user is missing region or details
     const needsEnrichment = carts.some(
@@ -1517,15 +1520,23 @@ export async function fetchActiveCarts(
           });
         }
       } catch (e) {
-        console.warn('Enrichment error in fetchActiveCarts:', e);
+        console.warn('Enrichment error in fetchActiveCartsPaginated:', e);
       }
     }
 
-    return carts;
+    return { carts, nextPage };
   } catch (error) {
-    console.error('fetchActiveCarts error:', error);
-    return [];
+    console.error('fetchActiveCartsPaginated error:', error);
+    return { carts: [], nextPage: null };
   }
+}
+
+export async function fetchActiveCarts(
+  search?: string,
+  regionId?: string | number
+): Promise<ActiveCartEntry[]> {
+  const res = await fetchActiveCartsPaginated(1, search, regionId);
+  return res.carts;
 }
 
 export async function updateActiveCartItemQty(

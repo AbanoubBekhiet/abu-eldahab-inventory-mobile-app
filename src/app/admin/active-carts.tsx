@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import {
   fetchActiveCarts,
+  fetchActiveCartsPaginated,
   fetchRegions,
   updateActiveCartItemQty,
   deleteAppUserCartItem,
@@ -42,6 +43,8 @@ export default function AdminActiveCartsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [nextPage, setNextPage] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Selected Cart for Details Modal
   const [selectedCart, setSelectedCart] = useState<ActiveCartEntry | null>(null);
@@ -54,15 +57,28 @@ export default function AdminActiveCartsScreen() {
   // Mutation Loading states
   const [actionLoading, setActionLoading] = useState(false);
 
-  const loadCarts = useCallback(async () => {
+  const loadCarts = useCallback(async (pageToLoad: number = 1) => {
+    if (pageToLoad === 1) setLoading(true);
+    else setLoadingMore(true);
+
     try {
-      const data = await fetchActiveCarts(searchQuery, selectedRegion);
-      setActiveCarts(Array.isArray(data) ? data : []);
+      const res = await fetchActiveCartsPaginated(pageToLoad, searchQuery, selectedRegion);
+      if (pageToLoad === 1) {
+        setActiveCarts(res.carts);
+      } else {
+        setActiveCarts((prev) => {
+          const existingIds = new Set(prev.map((c) => c.user.id));
+          const newItems = res.carts.filter((c) => !existingIds.has(c.user.id));
+          return [...prev, ...newItems];
+        });
+      }
+      setNextPage(res.nextPage);
     } catch (e) {
       console.warn('loadCarts error:', e);
-      setActiveCarts([]);
+      if (pageToLoad === 1) setActiveCarts([]);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       setRefreshing(false);
     }
   }, [searchQuery, selectedRegion]);
@@ -74,7 +90,7 @@ export default function AdminActiveCartsScreen() {
       if (Array.isArray(regionsList) && regionsList.length > 0) {
         setRegions(regionsList);
       }
-      await loadCarts();
+      await loadCarts(1);
     } catch (e) {
       console.warn('loadInitialData error:', e);
     } finally {
@@ -87,12 +103,18 @@ export default function AdminActiveCartsScreen() {
   }, [loadInitialData]);
 
   useEffect(() => {
-    loadCarts();
+    loadCarts(1);
   }, [searchQuery, selectedRegion, loadCarts]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadCarts();
+    loadCarts(1);
+  };
+
+  const handleLoadMore = () => {
+    if (!loadingMore && !loading && nextPage !== null) {
+      loadCarts(nextPage);
+    }
   };
 
   // Product search inside Modal
@@ -682,8 +704,18 @@ export default function AdminActiveCartsScreen() {
             keyExtractor={(item) => String(item.user.id)}
             renderItem={renderCartCard}
             contentContainerStyle={styles.listContent}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.4}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2E5A44']} />
+            }
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.footerLoader}>
+                  <ActivityIndicator size="small" color="#2E5A44" />
+                  <Text style={styles.footerLoaderText}>جاري تحميل المزيد من السلال...</Text>
+                </View>
+              ) : null
             }
           />
         )}
@@ -1653,5 +1685,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  footerLoader: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  footerLoaderText: {
+    fontSize: 12,
+    color: '#75786E',
+    fontWeight: 'bold',
   },
 });
