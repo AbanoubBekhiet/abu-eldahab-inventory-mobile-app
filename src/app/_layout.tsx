@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import Toast from 'react-native-toast-message';
 import { toastConfig } from '../components/toast-config';
 import GlobalCartProgress from '../components/global-cart-progress';
+import AdminModeIndicator from '../components/admin-mode-indicator';
 import { registerForPushNotificationsAsync, setupNotificationListeners, syncFcmTokenWithServer, getFcmToken } from '../services/fcm';
 import { loadSavedAuthToken } from '../services/api';
 
@@ -52,6 +53,8 @@ export default function RootLayout() {
         router.push('/admin/orders' as any);
       } else if (type === 'new_offer') {
         router.push('/offers');
+      } else if (type === 'custom_notification') {
+        router.push('/notifications');
       }
     });
 
@@ -68,15 +71,18 @@ export default function RootLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="index" />
         <Stack.Screen name="offers" />
+        <Stack.Screen name="notifications" />
         <Stack.Screen name="admin/index" />
         <Stack.Screen name="admin/active-carts" />
         <Stack.Screen name="admin/orders" />
         <Stack.Screen name="admin/offers" />
+        <Stack.Screen name="admin/notifications" />
         <Stack.Screen name="wishlist" />
         <Stack.Screen name="cart" />
         <Stack.Screen name="profile" />
       </Stack>
       <GlobalCartProgress />
+      <AdminModeIndicator />
       <Toast config={toastConfig} />
     </>
   );

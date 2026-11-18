@@ -19,6 +19,7 @@ import {
   logoutCustomer,
   User,
 } from '../../services/api';
+import { setActiveAppMode } from '../../services/app-mode';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import MobileFooterNav from '../../components/mobile-footer';
 
@@ -72,6 +73,24 @@ export default function AdminHubScreen() {
     ]);
   };
 
+  const handleSwitchToCustomerMode = () => {
+    Alert.alert(
+      'التبديل إلى وضع المستخدم',
+      'هل تريد الانتقال إلى وضع العميل لتصفح المتجر والمنتجات والعروض؟',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'الانتقال للمتجر 🛍️',
+          style: 'default',
+          onPress: async () => {
+            await setActiveAppMode('customer');
+            router.replace('/');
+          },
+        },
+      ]
+    );
+  };
+
   const navLinks = [
     {
       id: 'active-carts',
@@ -114,6 +133,16 @@ export default function AdminHubScreen() {
       color: '#7C3AED',
       bgColor: '#F5F3FF',
       borderColor: '#DDD6FE',
+    },
+    {
+      id: 'notifications',
+      title: 'إرسال الإشعارات الفورية',
+      subtitle: 'إرسال تنبيهات ورسائل لجميع العملاء أو لعميل محدد',
+      icon: 'send',
+      route: '/admin/notifications',
+      color: '#0D9488',
+      bgColor: '#F0FDFA',
+      borderColor: '#99F6E4',
     },
     {
       id: 'customers',
@@ -161,6 +190,31 @@ export default function AdminHubScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2E5A44']} />
         }
       >
+        {/* Switch to Customer Mode Banner */}
+        <TouchableOpacity
+          style={styles.modeSwitchBanner}
+          onPress={handleSwitchToCustomerMode}
+          activeOpacity={0.85}
+        >
+          <View style={styles.modeSwitchRight}>
+            <View style={styles.modeSwitchIconCircle}>
+              <MaterialIcons name="storefront" size={24} color="#1E3E2B" />
+            </View>
+            <View style={styles.modeSwitchTexts}>
+              <View style={styles.modeSwitchBadge}>
+                <View style={styles.modeSwitchDot} />
+                <Text style={styles.modeSwitchBadgeText}>وضع الإدارة نشط</Text>
+              </View>
+              <Text style={styles.modeSwitchTitle}>التبديل إلى وضع المستخدم (المتجر)</Text>
+              <Text style={styles.modeSwitchSubtitle}>تصفح المنتجات والعروض والسلة كعميل عادي</Text>
+            </View>
+          </View>
+          <View style={styles.modeSwitchActionBtn}>
+            <MaterialIcons name="swap-horiz" size={18} color="#FFFFFF" />
+            <Text style={styles.modeSwitchActionText}>تبديل</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* Quick Stats Overview */}
         <View style={styles.statsContainer}>
           <TouchableOpacity
@@ -281,6 +335,89 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingBottom: 24,
+  },
+  modeSwitchBanner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#D4EAB7',
+    marginBottom: 16,
+    shadowColor: '#1E3E2B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  modeSwitchRight: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  modeSwitchIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EEF4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D0E2D8',
+  },
+  modeSwitchTexts: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  modeSwitchBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    marginBottom: 4,
+  },
+  modeSwitchDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#059669',
+  },
+  modeSwitchBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#065F46',
+  },
+  modeSwitchTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1A2D23',
+  },
+  modeSwitchSubtitle: {
+    fontSize: 11,
+    color: '#7C7870',
+    marginTop: 2,
+  },
+  modeSwitchActionBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#1E3E2B',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  modeSwitchActionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   statsContainer: {
     flexDirection: 'row',

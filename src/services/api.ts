@@ -2,6 +2,14 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearFcmToken } from './fcm';
 import { Alert, DeviceEventEmitter } from 'react-native';
+import {
+  AppMode,
+  getActiveAppMode,
+  setActiveAppMode,
+  clearActiveAppMode,
+} from './app-mode';
+
+export { AppMode, getActiveAppMode, setActiveAppMode, clearActiveAppMode };
 
 function getApiBaseUrl(): string {
   // If you need to test locally, uncomment the code below:
@@ -34,6 +42,7 @@ export function setAuthToken(token: string | null) {
   } else {
     AsyncStorage.removeItem('auth_token').catch(() => {});
     AsyncStorage.removeItem('user_profile_v1').catch(() => {});
+    clearActiveAppMode().catch(() => {});
     cachedUser = null;
   }
 }
@@ -749,6 +758,7 @@ export async function logoutCustomer() {
     setAuthToken(null);
     cachedUser = null;
     await AsyncStorage.removeItem('user_profile_v1').catch(() => {});
+    await clearActiveAppMode().catch(() => {});
     await clearFcmToken();
     DeviceEventEmitter.emit('auth_updated');
   }
@@ -1394,24 +1404,31 @@ export interface ActiveCartEntry {
 export async function fetchActiveCartsPaginated(
   page: number = 1,
   search?: string,
-  regionId?: string | number
-): Promise<{ carts: ActiveCartEntry[]; nextPage: number | null }> {
+  regionId?: string | number,
+  readyStatus?: string
+): Promise<{
+  carts: ActiveCartEntry[];
+  nextPage: number | null;
+  counts?: { all: number; ready: number; not_ready: number };
+}> {
   try {
     if (!authToken) await loadSavedAuthToken();
     const query = new URLSearchParams();
     query.append('page', String(page));
     if (search && search.trim()) query.append('search', search.trim());
     if (regionId && regionId !== 'all') query.append('region_id', String(regionId));
+    if (readyStatus && readyStatus !== 'all') query.append('ready_status', readyStatus);
 
     const url = `${API_BASE_URL}/active-carts?${query.toString()}`;
     const headers: Record<string, string> = { 'Accept': 'application/json' };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
     const res = await fetch(url, { headers });
-    if (!res.ok) return { carts: [], nextPage: null };
+    if (!res.ok) return { carts: [], nextPage: null, counts: { all: 0, ready: 0, not_ready: 0 } };
     const data = await res.json();
     const carts: ActiveCartEntry[] = data.active_carts?.data || [];
     const nextPage: number | null = data.active_carts?.next_page ?? null;
+    const counts = data.counts || { all: carts.length, ready: 0, not_ready: 0 };
 
     // Check if any cart user is missing region or details
     const needsEnrichment = carts.some(
@@ -1524,18 +1541,19 @@ export async function fetchActiveCartsPaginated(
       }
     }
 
-    return { carts, nextPage };
+    return { carts, nextPage, counts };
   } catch (error) {
     console.error('fetchActiveCartsPaginated error:', error);
-    return { carts: [], nextPage: null };
+    return { carts: [], nextPage: null, counts: { all: 0, ready: 0, not_ready: 0 } };
   }
 }
 
 export async function fetchActiveCarts(
   search?: string,
-  regionId?: string | number
+  regionId?: string | number,
+  readyStatus?: string
 ): Promise<ActiveCartEntry[]> {
-  const res = await fetchActiveCartsPaginated(1, search, regionId);
+  const res = await fetchActiveCartsPaginated(1, search, regionId, readyStatus);
   return res.carts;
 }
 
@@ -1622,3 +1640,222 @@ export async function searchProductsForCart(search: string): Promise<Product[]> 
     return [];
   }
 }
+
+// ── Notifications System ──
+
+export interface AppNotification {
+  id: number;
+  title: string;
+  body: string;
+  type: string;
+  data?: any;
+  is_read: boolean;
+  created_at: string;
+}
+
+export async function fetchNotifications(
+  page: number = 1
+): Promise<{ notifications: AppNotification[]; nextPage: number | null }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return { notifications: [], nextPage: null };
+
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/notifications?page=${page}`, { headers });
+    if (!res.ok) return { notifications: [], nextPage: null };
+    const data = await res.json();
+
+    const items = data.notifications?.data || [];
+    const nextPage = data.notifications?.next_page ?? null;
+    return { notifications: items, nextPage };
+  } catch (error) {
+    console.error('fetchNotifications error:', error);
+    return { notifications: [], nextPage: null };
+  }
+}
+
+export async function fetchUnreadNotificationsCount(): Promise<number> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return 0;
+
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/notifications/unread-count`, { headers });
+    if (!res.ok) return 0;
+    const data = await res.json();
+    return Number(data.unread_count) || 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+export async function markNotificationAsRead(id: number | string): Promise<boolean> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return false;
+
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+      method: 'POST',
+      headers,
+    });
+    DeviceEventEmitter.emit('notification_read', { id });
+    return res.ok;
+  } catch (error) {
+    console.error('markNotificationAsRead error:', error);
+    return false;
+  }
+}
+
+export async function markAllNotificationsAsRead(): Promise<boolean> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return false;
+
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+      method: 'POST',
+      headers,
+    });
+    DeviceEventEmitter.emit('all_notifications_read');
+    return res.ok;
+  } catch (error) {
+    console.error('markAllNotificationsAsRead error:', error);
+    return false;
+  }
+}
+
+export async function sendAdminNotification(payload: {
+  title: string;
+  body: string;
+  user_id?: number | null;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return { success: false, message: 'غير مسجل دخول' };
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    };
+
+    const res = await fetch(`${API_BASE_URL}/notifications`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    return {
+      success: res.ok && data.success,
+      message: data.message || (res.ok ? 'تم إرسال الإشعار بنجاح' : 'فشل إرسال الإشعار'),
+    };
+  } catch (error: any) {
+    console.error('sendAdminNotification error:', error);
+    return { success: false, message: error.message || 'خطأ في الاتصال' };
+  }
+}
+
+export async function searchUsersForNotification(search: string = ''): Promise<{
+  id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  shop_name?: string;
+}[]> {
+  try {
+    if (!authToken) await loadSavedAuthToken();
+    if (!authToken) return [];
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    };
+
+    const cleanSearch = (search || '').trim();
+    const queryParam = cleanSearch ? `?search=${encodeURIComponent(cleanSearch)}` : '';
+
+    // 1. Primary: Exact system notification search endpoint (/notifications/search-users)
+    try {
+      const res = await fetch(`${API_BASE_URL}/notifications/search-users${queryParam}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const users = data.users || [];
+        if (Array.isArray(users) && users.length > 0) {
+          return users.map((u: any) => ({
+            id: Number(u.id),
+            name: u.name || '',
+            email: u.email && u.email !== '—' ? u.email : '',
+            phone: (u.phone && u.phone !== '—') ? u.phone : ((u.phone_number && u.phone_number !== '—') ? u.phone_number : ''),
+            shop_name: u.shop_name && u.shop_name !== '—' ? u.shop_name : '',
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('notifications/search-users fetch error, trying fallbacks', e);
+    }
+
+    // 2. Secondary: Fallback to app-users and customers-accounts
+    const userMap = new Map<number, { id: number; name: string; email: string; phone?: string; shop_name?: string }>();
+
+    try {
+      const [appUsersRes, custAccountsRes] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/app-users?page=1${cleanSearch ? `&search=${encodeURIComponent(cleanSearch)}` : ''}`, { headers }),
+        fetch(`${API_BASE_URL}/customers-accounts?page=1${cleanSearch ? `&search=${encodeURIComponent(cleanSearch)}` : ''}`, { headers }),
+      ]);
+
+      if (appUsersRes.status === 'fulfilled' && appUsersRes.value.ok) {
+        const data = await appUsersRes.value.json();
+        const list = data.users?.data || data.users || [];
+        if (Array.isArray(list)) {
+          list.forEach((u: any) => {
+            if (u.id) {
+              userMap.set(Number(u.id), {
+                id: Number(u.id),
+                name: u.name || '',
+                email: u.email && u.email !== '—' ? u.email : '',
+                phone: (u.phone && u.phone !== '—') ? u.phone : '',
+                shop_name: u.shop_name && u.shop_name !== '—' ? u.shop_name : '',
+              });
+            }
+          });
+        }
+      }
+
+      if (custAccountsRes.status === 'fulfilled' && custAccountsRes.value.ok) {
+        const data = await custAccountsRes.value.json();
+        const list = data.customers?.data || data.customers || [];
+        if (Array.isArray(list)) {
+          list.forEach((u: any) => {
+            if (u.id && !userMap.has(Number(u.id))) {
+              userMap.set(Number(u.id), {
+                id: Number(u.id),
+                name: u.name || '',
+                email: u.email && u.email !== '—' ? u.email : '',
+                phone: (u.phone && u.phone !== '—') ? u.phone : '',
+                shop_name: u.shop_name && u.shop_name !== '—' ? u.shop_name : '',
+              });
+            }
+          });
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn('Fallback search error:', fallbackErr);
+    }
+
+    return Array.from(userMap.values());
+  } catch (error) {
+    console.error('searchUsersForNotification error:', error);
+    return [];
+  }
+}
+

@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
+import { makePhoneCall, openWhatsApp, promptContactCustomer } from '../../services/contact';
 import {
   fetchActiveCarts,
   fetchActiveCartsPaginated,
@@ -40,6 +41,8 @@ export default function AdminActiveCartsScreen() {
   const [activeCarts, setActiveCarts] = useState<ActiveCartEntry[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [selectedRegion, setSelectedRegion] = useState<string | number>('all');
+  const [readyStatus, setReadyStatus] = useState<'all' | 'ready' | 'not_ready'>('all');
+  const [counts, setCounts] = useState({ all: 0, ready: 0, not_ready: 0 });
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,7 +65,7 @@ export default function AdminActiveCartsScreen() {
     else setLoadingMore(true);
 
     try {
-      const res = await fetchActiveCartsPaginated(pageToLoad, searchQuery, selectedRegion);
+      const res = await fetchActiveCartsPaginated(pageToLoad, searchQuery, selectedRegion, readyStatus);
       if (pageToLoad === 1) {
         setActiveCarts(res.carts);
       } else {
@@ -71,6 +74,9 @@ export default function AdminActiveCartsScreen() {
           const newItems = res.carts.filter((c) => !existingIds.has(c.user.id));
           return [...prev, ...newItems];
         });
+      }
+      if (res.counts) {
+        setCounts(res.counts);
       }
       setNextPage(res.nextPage);
     } catch (e) {
@@ -81,7 +87,7 @@ export default function AdminActiveCartsScreen() {
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, [searchQuery, selectedRegion]);
+  }, [searchQuery, selectedRegion, readyStatus]);
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -104,7 +110,7 @@ export default function AdminActiveCartsScreen() {
 
   useEffect(() => {
     loadCarts(1);
-  }, [searchQuery, selectedRegion, loadCarts]);
+  }, [searchQuery, selectedRegion, readyStatus, loadCarts]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -317,9 +323,18 @@ export default function AdminActiveCartsScreen() {
   const modalRemainingTotal = Math.max(0, modalMinTotal - modalTotalPrice);
   const modalIsLimitMet = modalMinTotal <= 0 || modalTotalPrice >= modalMinTotal;
 
-  // Filter active carts by selected region and search query
+  // Filter active carts by selected region, ready status, and search query
   const filteredCarts = useMemo(() => {
     return activeCarts.filter((cart) => {
+      // 0. Ready status filter
+      if (readyStatus !== 'all') {
+        const isLimitMet = cart.region_limits?.is_limit_met !== undefined
+          ? cart.region_limits.is_limit_met
+          : true;
+        if (readyStatus === 'ready' && !isLimitMet) return false;
+        if (readyStatus === 'not_ready' && isLimitMet) return false;
+      }
+
       // 1. Region filter
       if (selectedRegion !== 'all') {
         const userRegId = cart.user.region_id;
@@ -357,7 +372,7 @@ export default function AdminActiveCartsScreen() {
 
       return true;
     });
-  }, [activeCarts, selectedRegion, searchQuery, regions]);
+  }, [activeCarts, selectedRegion, readyStatus, searchQuery, regions]);
 
   // Render Single Cart Card
   const renderCartCard = ({ item }: { item: ActiveCartEntry }) => {
@@ -443,9 +458,31 @@ export default function AdminActiveCartsScreen() {
               )}
 
               {item.user.phone && item.user.phone !== '—' && (
-                <View style={styles.phoneBadge}>
-                  <MaterialIcons name="phone" size={12} color="#556052" />
-                  <Text style={styles.customerPhone}>{item.user.phone}</Text>
+                <View style={styles.phoneBadgeContainer}>
+                  <TouchableOpacity
+                    style={styles.phoneBadge}
+                    onPress={() => promptContactCustomer(item.user.name, item.user.phone)}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons name="phone" size={12} color="#1E3E2B" />
+                    <Text style={styles.customerPhone}>{item.user.phone}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.quickCallIconBtn}
+                    onPress={() => makePhoneCall(item.user.phone)}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  >
+                    <MaterialIcons name="call" size={12} color="#1E3E2B" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.quickWhatsappIconBtn}
+                    onPress={() => openWhatsApp(item.user.phone)}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  >
+                    <FontAwesome name="whatsapp" size={14} color="#25D366" />
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -602,6 +639,134 @@ export default function AdminActiveCartsScreen() {
           ) : null}
         </View>
 
+        {/* Ready Status Filter Tabs */}
+        <View style={styles.statusFilterWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statusFilterContainer}
+          >
+            {/* All Carts */}
+            <TouchableOpacity
+              style={[
+                styles.statusChip,
+                readyStatus === 'all' && styles.statusChipActive,
+              ]}
+              onPress={() => setReadyStatus('all')}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons
+                name="shopping-cart"
+                size={14}
+                color={readyStatus === 'all' ? '#FFFFFF' : '#1E3E2B'}
+              />
+              <Text
+                style={[
+                  styles.statusChipText,
+                  readyStatus === 'all' && styles.statusChipTextActive,
+                ]}
+              >
+                كل السلال
+              </Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  readyStatus === 'all' && styles.statusBadgeActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    readyStatus === 'all' && styles.statusBadgeTextActive,
+                  ]}
+                >
+                  {counts.all}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Ready to checkout */}
+            <TouchableOpacity
+              style={[
+                styles.statusChip,
+                styles.statusChipReady,
+                readyStatus === 'ready' && styles.statusChipReadyActive,
+              ]}
+              onPress={() => setReadyStatus('ready')}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons
+                name="check-circle"
+                size={14}
+                color={readyStatus === 'ready' ? '#FFFFFF' : '#15803D'}
+              />
+              <Text
+                style={[
+                  styles.statusChipText,
+                  { color: readyStatus === 'ready' ? '#FFFFFF' : '#15803D' },
+                ]}
+              >
+                جاهزة للإتمام
+              </Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: readyStatus === 'ready' ? 'rgba(255,255,255,0.25)' : '#D1FAE5' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    { color: readyStatus === 'ready' ? '#FFFFFF' : '#065F46' },
+                  ]}
+                >
+                  {counts.ready}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Under Limit */}
+            <TouchableOpacity
+              style={[
+                styles.statusChip,
+                styles.statusChipNotReady,
+                readyStatus === 'not_ready' && styles.statusChipNotReadyActive,
+              ]}
+              onPress={() => setReadyStatus('not_ready')}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons
+                name="error-outline"
+                size={14}
+                color={readyStatus === 'not_ready' ? '#FFFFFF' : '#D97706'}
+              />
+              <Text
+                style={[
+                  styles.statusChipText,
+                  { color: readyStatus === 'not_ready' ? '#FFFFFF' : '#B45309' },
+                ]}
+              >
+                تحت الحد الأدنى
+              </Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: readyStatus === 'not_ready' ? 'rgba(255,255,255,0.25)' : '#FEF3C7' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    { color: readyStatus === 'not_ready' ? '#FFFFFF' : '#92400E' },
+                  ]}
+                >
+                  {counts.not_ready}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
         {/* Region Filter Chips */}
         <View style={styles.regionsWrapper}>
           <ScrollView
@@ -691,10 +856,8 @@ export default function AdminActiveCartsScreen() {
             <MaterialIcons name="remove-shopping-cart" size={48} color="#D5D2C4" />
             <Text style={styles.emptyTitle}>لا توجد سلال تطابق الفلتر</Text>
             <Text style={styles.emptySubtitle}>
-              {selectedRegion !== 'all'
-                ? `لم يتم العثور على سلال نشطة في منطقة ${regions.find((r) => r.id == selectedRegion)?.name || 'المحددة'}`
-                : searchQuery
-                ? 'لم يتم العثور على سلال تطابق كلمة البحث'
+              {selectedRegion !== 'all' || readyStatus !== 'all' || searchQuery
+                ? 'لم يتم العثور على سلال تطابق التصفية المحددة'
                 : 'جميع سلال العملاء فارغة حالياً'}
             </Text>
           </View>
@@ -737,9 +900,41 @@ export default function AdminActiveCartsScreen() {
               </TouchableOpacity>
               <View style={styles.modalTitleBox}>
                 <Text style={styles.modalTitle}>{selectedCart?.user.name}</Text>
-                <Text style={styles.modalSubtitle}>{selectedCart?.user.phone}</Text>
+                {selectedCart?.user.phone && selectedCart.user.phone !== '—' ? (
+                  <TouchableOpacity
+                    style={styles.modalPhonePill}
+                    onPress={() => promptContactCustomer(selectedCart.user.name, selectedCart.user.phone)}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons name="phone" size={12} color="#1E3E2B" />
+                    <Text style={styles.modalSubtitle}>{selectedCart.user.phone}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.modalSubtitle}>بدون هاتف</Text>
+                )}
               </View>
-              <View style={{ width: 32 }} />
+
+              {/* Action Buttons: Phone & WhatsApp */}
+              {selectedCart?.user.phone && selectedCart.user.phone !== '—' ? (
+                <View style={styles.modalContactIconsRow}>
+                  <TouchableOpacity
+                    style={styles.modalCallCircleBtn}
+                    onPress={() => makePhoneCall(selectedCart.user.phone)}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  >
+                    <MaterialIcons name="call" size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalWhatsappCircleBtn}
+                    onPress={() => openWhatsApp(selectedCart.user.phone)}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  >
+                    <FontAwesome name="whatsapp" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ width: 32 }} />
+              )}
             </View>
 
             {/* Region Limit Banner in Modal */}
@@ -974,6 +1169,72 @@ const styles = StyleSheet.create({
     color: '#1A2D23',
     textAlign: 'right',
   },
+  statusFilterWrapper: {
+    marginBottom: 10,
+  },
+  statusFilterContainer: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    alignItems: 'center',
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  statusChip: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#EAE8E2',
+  },
+  statusChipActive: {
+    backgroundColor: '#1E3E2B',
+    borderColor: '#1E3E2B',
+  },
+  statusChipReady: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  statusChipReadyActive: {
+    backgroundColor: '#15803D',
+    borderColor: '#15803D',
+  },
+  statusChipNotReady: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
+  },
+  statusChipNotReadyActive: {
+    backgroundColor: '#D97706',
+    borderColor: '#D97706',
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#1A2D23',
+  },
+  statusChipTextActive: {
+    color: '#FFFFFF',
+  },
+  statusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: '#F3EDE2',
+  },
+  statusBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#1A2D23',
+  },
+  statusBadgeTextActive: {
+    color: '#FFFFFF',
+  },
   regionsWrapper: {
     marginBottom: 12,
   },
@@ -1140,6 +1401,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1E3E2B',
   },
+  phoneBadgeContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+  },
   phoneBadge: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -1148,11 +1414,74 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E6E4DD',
   },
   customerPhone: {
     fontSize: 12,
-    color: '#556052',
-    fontWeight: '600',
+    color: '#1E3E2B',
+    fontWeight: '700',
+  },
+  quickCallIconBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EEF4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D0E2D8',
+  },
+  quickWhatsappIconBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E8F8EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#C6F0D3',
+  },
+  modalPhonePill: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EEF4F1',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  modalContactIconsRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalCallCircleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#2E5A44',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2E5A44',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  modalWhatsappCircleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#25D366',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#25D366',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 2,
   },
   shopNameText: {
     fontSize: 11,

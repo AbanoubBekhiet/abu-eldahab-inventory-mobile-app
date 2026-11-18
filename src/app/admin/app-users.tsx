@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
+import { makePhoneCall, openWhatsApp, promptContactCustomer } from '../../services/contact';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import {
@@ -23,6 +24,7 @@ import {
   fetchAppUserCart,
   fetchAppUserWishlist,
   deleteAppUserCartItem,
+  sendAdminNotification,
   AppUser,
   AppUserProductItem,
 } from '../../services/api';
@@ -67,6 +69,41 @@ export default function AdminAppUsersScreen() {
   const [loadingTabMore, setLoadingTabMore] = useState(false);
 
   const [expandedOrderId, setExpandedOrderId] = useState<string | number | null>(null);
+
+  // Notification Modal State
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [notifTitle, setNotifTitle] = useState('');
+  const [notifBody, setNotifBody] = useState('');
+  const [sendingNotif, setSendingNotif] = useState(false);
+
+  const handleSendUserNotification = async () => {
+    if (!notifTitle.trim() || !notifBody.trim()) {
+      Alert.alert('تنبيه', 'يرجى كتابة عنوان الإشعار ونص الرسالة');
+      return;
+    }
+    if (!selectedUser) return;
+
+    setSendingNotif(true);
+    try {
+      const res = await sendAdminNotification({
+        title: notifTitle.trim(),
+        body: notifBody.trim(),
+        user_id: selectedUser.id,
+      });
+      if (res.success) {
+        Alert.alert('نجاح', `تم إرسال الإشعار إلى ${selectedUser.name} بنجاح`);
+        setIsNotifModalOpen(false);
+        setNotifTitle('');
+        setNotifBody('');
+      } else {
+        Alert.alert('خطأ', res.message || 'فشل إرسال الإشعار');
+      }
+    } catch (e: any) {
+      Alert.alert('خطأ', e.message || 'فشل إرسال الإشعار');
+    } finally {
+      setSendingNotif(false);
+    }
+  };
 
   useEffect(() => {
     loadUsers(1, search);
@@ -162,7 +199,34 @@ export default function AdminAppUsersScreen() {
         <MaterialIcons name="chevron-left" size={24} color="#A8A29E" />
       </View>
       <View style={styles.userDetails}>
-        <Text style={styles.userMeta}><MaterialIcons name="phone" size={12} /> {item.phone}</Text>
+        {item.phone && item.phone !== '—' ? (
+          <View style={styles.phoneRowContainer}>
+            <TouchableOpacity
+              onPress={() => promptContactCustomer(item.name, item.phone)}
+              style={styles.clickablePhoneRow}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="phone" size={13} color="#2D3C1F" />
+              <Text style={styles.userMeta}>{item.phone}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionBtnCall}
+              onPress={() => makePhoneCall(item.phone)}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            >
+              <MaterialIcons name="call" size={12} color="#1E3E2B" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionBtnWhatsapp}
+              onPress={() => openWhatsApp(item.phone)}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            >
+              <FontAwesome name="whatsapp" size={13} color="#25D366" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={styles.userMeta}><MaterialIcons name="phone" size={12} /> بدون هاتف</Text>
+        )}
         <Text style={styles.userMeta}><MaterialIcons name="location-on" size={12} /> {item.region}</Text>
       </View>
     </TouchableOpacity>
@@ -308,19 +372,66 @@ export default function AdminAppUsersScreen() {
 
           {/* User Contact Info */}
           {selectedUser && (
-            <View style={{ padding: 16, backgroundColor: '#F8F6F1', marginHorizontal: 20, marginBottom: 12, borderRadius: 12, gap: 8 }}>
+            <View style={{ padding: 14, backgroundColor: '#F8F6F1', marginHorizontal: 20, marginBottom: 12, borderRadius: 14, gap: 10, borderWidth: 1, borderColor: '#EAE8E2' }}>
               {selectedUser.phone !== '—' && (
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}
-                  onPress={() => Linking.openURL(`tel:${selectedUser.phone}`)}
-                >
-                  <MaterialIcons name="phone" size={20} color="#2D3C1F" />
-                  <Text style={{ fontSize: 15, color: '#1F1B13' }}>{selectedUser.phone}</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <TouchableOpacity 
+                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flex: 1 }}
+                    onPress={() => promptContactCustomer(selectedUser.name, selectedUser.phone)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#EEF4F1', alignItems: 'center', justifyContent: 'center' }}>
+                      <MaterialIcons name="phone" size={18} color="#2D3C1F" />
+                    </View>
+                    <View>
+                      <Text style={{ fontSize: 10, color: '#7C7870', textAlign: 'right' }}>رقم الهاتف (اضغط للخيارات)</Text>
+                      <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1F1B13' }}>{selectedUser.phone}</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Call & WhatsApp Quick Buttons */}
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        gap: 4,
+                        backgroundColor: '#EEF4F1',
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: '#D0E2D8',
+                      }}
+                      onPress={() => makePhoneCall(selectedUser.phone)}
+                    >
+                      <MaterialIcons name="call" size={14} color="#2D3C1F" />
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2D3C1F' }}>موبايل</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        gap: 5,
+                        backgroundColor: '#E8F8EE',
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: '#C6F0D3',
+                      }}
+                      onPress={() => openWhatsApp(selectedUser.phone)}
+                    >
+                      <FontAwesome name="whatsapp" size={15} color="#25D366" />
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#1B803A' }}>واتساب</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               )}
               {selectedUser.address !== '—' && (
                 <TouchableOpacity 
-                  style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}
+                  style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#EAE8E2' }}
                   onPress={() => {
                     if (selectedUser.latitude && selectedUser.longitude) {
                       Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${selectedUser.latitude},${selectedUser.longitude}`);
@@ -329,10 +440,31 @@ export default function AdminAppUsersScreen() {
                     }
                   }}
                 >
-                  <MaterialIcons name="location-on" size={20} color="#2D3C1F" />
-                  <Text style={{ fontSize: 15, color: '#1F1B13' }}>{selectedUser.address} - {selectedUser.region}</Text>
+                  <MaterialIcons name="location-on" size={18} color="#2D3C1F" />
+                  <Text style={{ fontSize: 13, color: '#556052', flex: 1, textAlign: 'right' }}>{selectedUser.address} - {selectedUser.region}</Text>
                 </TouchableOpacity>
               )}
+
+              {/* Send Notification Button */}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: '#2E5A44',
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  marginTop: 4,
+                }}
+                onPress={() => setIsNotifModalOpen(true)}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="send" size={16} color="#FFFFFF" />
+                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#FFFFFF' }}>
+                  إرسال إشعار فوري لهذا العميل
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -379,6 +511,74 @@ export default function AdminAppUsersScreen() {
             )}
           </View>
         </SafeAreaView>
+      </Modal>
+
+      {/* Send Notification To User Modal */}
+      <Modal
+        visible={isNotifModalOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsNotifModalOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 }}>
+            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1A2D23' }}>
+                إرسال إشعار إلى {selectedUser?.name}
+              </Text>
+              <TouchableOpacity onPress={() => setIsNotifModalOpen(false)}>
+                <MaterialIcons name="close" size={20} color="#7C7870" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#5C5950', marginBottom: 4, textAlign: 'right' }}>
+              عنوان الإشعار
+            </Text>
+            <TextInput
+              style={{ backgroundColor: '#FAF9F6', borderWidth: 1, borderColor: '#EAE8E2', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, textAlign: 'right', marginBottom: 12 }}
+              value={notifTitle}
+              onChangeText={setNotifTitle}
+              placeholder="مثال: تنبيه بخصوص طلبك"
+              placeholderTextColor="#9A978F"
+            />
+
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#5C5950', marginBottom: 4, textAlign: 'right' }}>
+              نص الرسالة
+            </Text>
+            <TextInput
+              style={{ backgroundColor: '#FAF9F6', borderWidth: 1, borderColor: '#EAE8E2', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, textAlign: 'right', minHeight: 80, textAlignVertical: 'top', marginBottom: 16 }}
+              value={notifBody}
+              onChangeText={setNotifBody}
+              placeholder="اكتب نص الرسالة التي ستصل للعميل كإشعار..."
+              placeholderTextColor="#9A978F"
+              multiline
+              numberOfLines={4}
+            />
+
+            <View style={{ flexDirection: 'row-reverse', gap: 10, justifyContent: 'flex-start' }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#2E5A44', paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 6 }}
+                onPress={handleSendUserNotification}
+                disabled={sendingNotif}
+              >
+                {sendingNotif ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialIcons name="send" size={16} color="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>إرسال الآن</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: '#EAE8E2', alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => setIsNotifModalOpen(false)}
+              >
+                <Text style={{ color: '#5C5950', fontWeight: '600', fontSize: 14 }}>إلغاء</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -446,6 +646,36 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F5F5F5',
     paddingTop: 12,
+  },
+  phoneRowContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  clickablePhoneRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quickActionBtnCall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EEF4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D0E2D8',
+  },
+  quickActionBtnWhatsapp: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E8F8EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#C6F0D3',
   },
   userMeta: { fontSize: 12, color: '#75786E', textAlign: 'right' },
 

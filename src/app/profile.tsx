@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -26,6 +27,7 @@ import {
   fetchAppSettings,
   AppSettingsData,
 } from '../services/api';
+import { setActiveAppMode } from '../services/app-mode';
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   pending:   { label: 'قيد الانتظار', color: '#92400E', bg: '#FEF3C7' },
@@ -81,6 +83,24 @@ export default function ProfileScreen() {
     await logoutCustomer();
     setAccountData(null);
     router.replace('/login');
+  };
+
+  const handleSwitchToAdmin = () => {
+    Alert.alert(
+      'لوحة الإدارة',
+      'هل تريد الانتقال إلى لوحة تحكم الأدمن؟',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'التبديل الآن 👑',
+          style: 'default',
+          onPress: async () => {
+            await setActiveAppMode('admin');
+            router.replace('/admin');
+          },
+        },
+      ]
+    );
   };
 
   const openSupportModal = async () => {
@@ -163,7 +183,37 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Admin Mode Switch Banner */}
+            {isAdmin && (
+              <View style={styles.adminSwitchBanner}>
+                <View style={styles.adminSwitchHeader}>
+                  <View style={styles.adminSwitchIconBox}>
+                    <MaterialIcons name="admin-panel-settings" size={26} color="#1E3E2B" />
+                  </View>
+                  <View style={styles.adminSwitchInfo}>
+                    <View style={styles.adminSwitchBadge}>
+                      <Text style={styles.adminSwitchBadgeText}>
+                        {user.role === 'sub_admin' || user.role === 'subadmin' ? 'صلاحية ساب أدمن 🛡️' : 'صلاحية أدمن 👑'}
+                      </Text>
+                    </View>
+                    <Text style={styles.adminSwitchTitle}>وضع العميل نشط حالياً</Text>
+                    <Text style={styles.adminSwitchSub}>
+                      يمكنك التبديل إلى لوحة تحكم الإدارة لإدارة السلال والطلبات والمنتجات
+                    </Text>
+                  </View>
+                </View>
 
+                <TouchableOpacity
+                  style={styles.adminSwitchActionBtn}
+                  onPress={handleSwitchToAdmin}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="dashboard" size={18} color="#FFFFFF" />
+                  <Text style={styles.adminSwitchActionText}>التبديل إلى لوحة تحكم الأدمن</Text>
+                  <MaterialIcons name="arrow-back" size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Quick Links */}
             <View style={styles.accountListCard}>
@@ -335,6 +385,80 @@ const styles = StyleSheet.create({
     borderRadius: 9999, marginTop: 12,
   },
   editProfileText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
+
+  adminSwitchBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#D4EAB7',
+    shadowColor: '#1E3E2B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  adminSwitchHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+  },
+  adminSwitchIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EEF4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D0E2D8',
+  },
+  adminSwitchInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  adminSwitchBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    marginBottom: 4,
+  },
+  adminSwitchBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#065F46',
+  },
+  adminSwitchTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1A2D23',
+  },
+  adminSwitchSub: {
+    fontSize: 11,
+    color: '#7C7870',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  adminSwitchActionBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1E3E2B',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+  },
+  adminSwitchActionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
 
   // Balance Card
   balanceCard: {

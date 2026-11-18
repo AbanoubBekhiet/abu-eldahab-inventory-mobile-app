@@ -11,11 +11,13 @@ import {
 import { useRouter, useSegments } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CartItem, fetchUserProfile, getCartItems, User, isAdminOrSubAdmin } from '../services/api';
+import { getActiveAppMode } from '../services/app-mode';
 import { useAudioPlayer } from 'expo-audio';
 
 export default function GlobalCartProgress() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [activeMode, setActiveMode] = useState<string>('customer');
   const [sound, setSound] = useState<any>(null);
   const router = useRouter();
   const segments = useSegments();
@@ -54,7 +56,9 @@ export default function GlobalCartProgress() {
     async function init() {
       const profile = await fetchUserProfile();
       setUserProfile(profile || null);
-      if (profile && !isAdminOrSubAdmin(profile)) {
+      const mode = await getActiveAppMode();
+      setActiveMode(mode);
+      if (profile && (!isAdminOrSubAdmin(profile) || mode === 'customer')) {
         const items = await getCartItems();
         setCartItems(items);
       } else {
@@ -67,8 +71,14 @@ export default function GlobalCartProgress() {
       init();
     });
 
+    const modeSub = DeviceEventEmitter.addListener('app_mode_changed', (m) => {
+      setActiveMode(m);
+      init();
+    });
+
     return () => {
       authSub.remove();
+      modeSub.remove();
     };
   }, []);
 
@@ -128,8 +138,9 @@ export default function GlobalCartProgress() {
   const currentRoute = segments[segments.length - 1];
   if (currentRoute === 'cart') return null;
 
-  // If user is admin/subadmin, or doesn't have a minimum order region, we can just hide or simplify it.
-  if (!userProfile || isAdminOrSubAdmin(userProfile)) return null;
+  // If user is admin/subadmin, only show in customer mode
+  if (!userProfile) return null;
+  if (isAdminOrSubAdmin(userProfile) && activeMode !== 'customer') return null;
   if (!userProfile.region || userProfile.region.min_order_total <= 0) return null;
 
   // Do not show if cart is completely empty (optional, but requested to show progress when adding).

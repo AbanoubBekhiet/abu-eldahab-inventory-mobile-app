@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { fetchUserProfile, loadSavedAuthToken, isAdminOrSubAdmin, User } from '../services/api';
+import {
+  fetchUserProfile,
+  loadSavedAuthToken,
+  isAdminOrSubAdmin,
+  User,
+} from '../services/api';
+import {
+  getActiveAppMode,
+  setActiveAppMode,
+} from '../services/app-mode';
 
 export function useRoleGuard(requiredRole: 'admin' | 'customer') {
   const router = useRouter();
@@ -19,13 +28,24 @@ export function useRoleGuard(requiredRole: 'admin' | 'customer') {
 
         if (userObj) {
           const isAdmin = isAdminOrSubAdmin(userObj);
-          if (requiredRole === 'customer' && isAdmin) {
-            router.replace('/admin' as any);
-            return;
-          }
-          if (requiredRole === 'admin' && !isAdmin) {
-            router.replace('/');
-            return;
+          const currentMode = await getActiveAppMode();
+
+          if (!isAdmin) {
+            if (requiredRole === 'admin') {
+              router.replace('/');
+              return;
+            }
+          } else {
+            if (requiredRole === 'admin') {
+              if (currentMode !== 'admin') {
+                await setActiveAppMode('admin');
+              }
+            } else if (requiredRole === 'customer') {
+              if (currentMode === 'admin') {
+                router.replace('/admin' as any);
+                return;
+              }
+            }
           }
         } else {
           router.replace('/login');

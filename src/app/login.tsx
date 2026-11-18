@@ -27,6 +27,10 @@ import {
   Region,
   getSettingsLogoUrl,
 } from '../services/api';
+import {
+  getActiveAppMode,
+  setActiveAppMode,
+} from '../services/app-mode';
 import { registerForPushNotificationsAsync } from '../services/fcm';
 
 export default function LoginScreen() {
@@ -79,7 +83,12 @@ export default function LoginScreen() {
         }
         if (user) {
           if (isAdminOrSubAdmin(user)) {
-            router.replace('/admin');
+            const savedMode = await getActiveAppMode();
+            if (savedMode === 'customer') {
+              router.replace('/');
+            } else {
+              router.replace('/admin');
+            }
           } else {
             router.replace('/');
           }
@@ -173,8 +182,10 @@ export default function LoginScreen() {
 
       const userObj = res?.user || res?.data?.user || (await fetchUserProfile());
       if (isAdminOrSubAdmin(userObj)) {
+        await setActiveAppMode('admin');
         router.replace('/admin' as any);
       } else {
+        await setActiveAppMode('customer');
         router.replace('/');
       }
     } catch (err: any) {

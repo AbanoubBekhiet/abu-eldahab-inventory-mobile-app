@@ -12,6 +12,10 @@ import {
 	Image,
 	Dimensions,
 	RefreshControl,
+	DeviceEventEmitter,
+	LayoutAnimation,
+	Platform,
+	UIManager,
 } from "react-native";
 import Toast from 'react-native-toast-message';
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,6 +33,7 @@ import {
 	updateCartItemQty,
 	isAdminOrSubAdmin,
 	fetchActiveOffers,
+	fetchUnreadNotificationsCount,
 	getSettingsLogoUrl,
 	Product,
 	Category,
@@ -36,9 +41,16 @@ import {
 	User,
 	OfferItem,
 } from "../services/api";
+import { setActiveAppMode } from "../services/app-mode";
 import MobileFooterNav from "../components/mobile-footer";
 import { AppImage } from "../components/app-image";
 import { useRoleGuard } from "../hooks/useRoleGuard";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+	UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function MobileHomeScreen() {
 	useRoleGuard("customer");
@@ -61,30 +73,96 @@ export default function MobileHomeScreen() {
 	// Active Offers
 	const [activeOffers, setActiveOffers] = useState<OfferItem[]>([]);
 
+	// Unread Notifications Count
+	const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+
 	// Logo URL
 	const logoUrl = getSettingsLogoUrl();
 
-	// Carousel State
+	// Offers Carousel Auto-Advance State & Refs
+	const offersCarouselRef = React.useRef<FlatList>(null);
+	const carouselTimerRef = React.useRef<any>(null);
+	const activeOfferIndexRef = React.useRef(0);
+	const isUserInteractingRef = React.useRef(false);
 	const [activeOfferIndex, setActiveOfferIndex] = useState(0);
-	const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: any[] }) => {
-		if (viewableItems.length > 0) {
-			setActiveOfferIndex(viewableItems[0].index || 0);
+
+	const startOffersCarouselTimer = useCallback(() => {
+		if (carouselTimerRef.current) {
+			clearInterval(carouselTimerRef.current);
+			carouselTimerRef.current = null;
+		}
+		if (activeOffers.length <= 1) return;
+
+		carouselTimerRef.current = setInterval(() => {
+			if (isUserInteractingRef.current) return;
+			if (activeOffers.length <= 1) return;
+
+			const currentIdx = activeOfferIndexRef.current;
+			const nextIdx = (currentIdx + 1) % activeOffers.length;
+
+			activeOfferIndexRef.current = nextIdx;
+			try {
+				LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+			} catch (_) {}
+			setActiveOfferIndex(nextIdx);
+
+			offersCarouselRef.current?.scrollToIndex({
+				index: nextIdx,
+				animated: true,
+			});
+		}, 3000); // 3 seconds interval for smooth transition
+	}, [activeOffers.length]);
+
+	const stopOffersCarouselTimer = useCallback(() => {
+		if (carouselTimerRef.current) {
+			clearInterval(carouselTimerRef.current);
+			carouselTimerRef.current = null;
 		}
 	}, []);
-	const viewabilityConfig = { itemVisiblePercentThreshold: 50 };
 
-	// Refresh cart + favorites every time screen is focused
+	// Keep activeOfferIndexRef in sync with state
+	useEffect(() => {
+		activeOfferIndexRef.current = activeOfferIndex;
+	}, [activeOfferIndex]);
+
+	// Auto-start carousel timer whenever activeOffers changes
+	useEffect(() => {
+		startOffersCarouselTimer();
+		return () => stopOffersCarouselTimer();
+	}, [startOffersCarouselTimer, stopOffersCarouselTimer]);
+
+	const onViewableItemsChanged = useCallback(
+		({ viewableItems }: { viewableItems: any[] }) => {
+			if (viewableItems && viewableItems.length > 0 && viewableItems[0].index != null) {
+				const idx = viewableItems[0].index;
+				if (activeOfferIndexRef.current !== idx) {
+					try {
+						LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+					} catch (_) {}
+					setActiveOfferIndex(idx);
+					activeOfferIndexRef.current = idx;
+				}
+			}
+		},
+		[]
+	);
+	const viewabilityConfig = React.useRef({
+		itemVisiblePercentThreshold: 60,
+	}).current;
+
+	// Refresh cart + favorites + notifications count every time screen is focused
 	useFocusEffect(
 		useCallback(() => {
 			let active = true;
 			const loadData = async () => {
 				try {
-					const [user, cats, favs, cart, offers] = await Promise.all([
+					const [user, cats, favs, cart, offers, unreadCount] = await Promise.all([
 						fetchUserProfile(),
 						fetchCategories(),
 						getFavoriteIds(),
 						getCartItems(),
 						fetchActiveOffers(),
+						fetchUnreadNotificationsCount(),
 					]);
 					if (!active) return;
 					if (user) setUserProfile(user);
@@ -92,14 +170,20 @@ export default function MobileHomeScreen() {
 					setFavoriteIds(Array.isArray(favs) ? [...favs.map(Number)] : []);
 					setCartItems(Array.isArray(cart) ? [...cart] : []);
 					setActiveOffers(Array.isArray(offers) ? offers : []);
+					setUnreadNotificationsCount(unreadCount || 0);
 				} catch (e) {
 					if (!active) return;
 					setCategories([]);
 				}
 			};
 			loadData();
-			return () => { active = false; };
-		}, [])
+			startOffersCarouselTimer();
+
+			return () => {
+				active = false;
+				stopOffersCarouselTimer();
+			};
+		}, [startOffersCarouselTimer, stopOffersCarouselTimer])
 	);
 
 	const [nextPage, setNextPage] = useState<number | null>(null);
@@ -112,18 +196,20 @@ export default function MobileHomeScreen() {
 			await Promise.all([
 				loadProducts(true),
 				(async () => {
-					const [user, cats, favs, cart, offers] = await Promise.all([
+					const [user, cats, favs, cart, offers, unreadCount] = await Promise.all([
 						fetchUserProfile(),
 						fetchCategories(),
 						getFavoriteIds(),
 						getCartItems(),
 						fetchActiveOffers(),
+						fetchUnreadNotificationsCount(),
 					]);
 					if (user) setUserProfile(user);
 					setCategories(Array.isArray(cats) ? cats : []);
 					setFavoriteIds(Array.isArray(favs) ? [...favs.map(Number)] : []);
 					setCartItems(Array.isArray(cart) ? [...cart] : []);
 					setActiveOffers(Array.isArray(offers) ? offers : []);
+					setUnreadNotificationsCount(unreadCount || 0);
 				})()
 			]);
 		} catch (e) {
@@ -327,82 +413,208 @@ export default function MobileHomeScreen() {
 				onEndReachedThreshold={0.4}
 				ListHeaderComponent={
 					<>
-						{/* Greeting Header with App Logo & User Name */}
+						{/* Greeting Header with App Logo, User Name & Notification Bell */}
 						<View style={styles.greetingHeader}>
-							<View style={styles.userAvatarBadge}>
-								<Image
-									source={require('../../assets/images/default_logo.jpeg')}
-									style={{ width: 40, height: 40, borderRadius: 20 }}
-									resizeMode="contain"
-								/>
+							<View style={styles.greetingRight}>
+								<View style={styles.userAvatarBadge}>
+									<Image
+										source={require('../../assets/images/default_logo.jpeg')}
+										style={{ width: 40, height: 40, borderRadius: 20 }}
+										resizeMode="contain"
+									/>
+								</View>
+								<View style={styles.greetingTexts}>
+									<Text style={styles.greetingTitle}>
+										{userProfile?.name ? `أهلاً بك ${userProfile.name}` : "مرحباً بك في تطبيق أبو الدهب"}
+									</Text>
+									<Text style={styles.greetingSub}>
+										{userProfile?.shop_name || "جاهز لتسوق الخردوات والمنظفات والورقيات اليوم؟"}
+									</Text>
+								</View>
 							</View>
-							<View style={styles.greetingTexts}>
-								<Text style={styles.greetingTitle}>
-									{userProfile?.name ? `أهلاً بك ${userProfile.name}` : "مرحباً بك في تطبيق أبو الدهب"}
-								</Text>
-								<Text style={styles.greetingSub}>
-									{userProfile?.shop_name || "جاهز لتسوق الخردوات والمنظفات والورقيات اليوم؟"}
-								</Text>
-							</View>
+
+							<TouchableOpacity
+								style={styles.notificationBellBtn}
+								onPress={() => router.push('/notifications')}
+								activeOpacity={0.7}
+							>
+								<MaterialIcons name="notifications-none" size={24} color="#1A2D23" />
+								{unreadNotificationsCount > 0 && (
+									<View style={styles.bellBadge}>
+										<Text style={styles.bellBadgeText}>
+											{unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+										</Text>
+									</View>
+								)}
+							</TouchableOpacity>
 						</View>
+
+						{/* Admin Mode Notice & Return Bar */}
+						{isAdminOrSubAdmin(userProfile) && (
+							<TouchableOpacity
+								style={styles.adminModeNoticeBar}
+								onPress={() => {
+									Alert.alert(
+										'لوحة الإدارة',
+										'أنت تتصفح بوضع العميل. هل تريد العودة إلى لوحة تحكم الأدمن؟',
+										[
+											{ text: 'إلغاء', style: 'cancel' },
+											{
+												text: 'العودة للإدارة 👑',
+												style: 'default',
+												onPress: async () => {
+													await setActiveAppMode('admin');
+													router.replace('/admin');
+												},
+											},
+										]
+									);
+								}}
+								activeOpacity={0.8}
+							>
+								<View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+									<View style={styles.adminCrownCircle}>
+										<MaterialIcons name="admin-panel-settings" size={18} color="#FFFFFF" />
+									</View>
+									<View style={{ alignItems: 'flex-end' }}>
+										<Text style={styles.adminModeNoticeTitle}>أنت تتصفح بوضع العميل 🛍️</Text>
+										<Text style={styles.adminModeNoticeSub}>اضغط هنا للعودة إلى لوحة تحكم الأدمن</Text>
+									</View>
+								</View>
+								<View style={styles.adminModeNoticeBtn}>
+									<MaterialIcons name="dashboard" size={14} color="#1E3E2B" />
+									<Text style={styles.adminModeNoticeBtnText}>لوحة الإدارة</Text>
+								</View>
+							</TouchableOpacity>
+						)}
 
 						{/* Offers Carousel / FMCG Wholesale Banner */}
 						{activeOffers.length > 0 ? (
 							<View style={{ marginVertical: 10 }}>
 								<FlatList
+									ref={offersCarouselRef}
 									data={activeOffers}
 									keyExtractor={(item) => String(item.id)}
 									horizontal
 									pagingEnabled
+									decelerationRate="fast"
+									snapToInterval={SCREEN_WIDTH}
+									snapToAlignment="center"
 									showsHorizontalScrollIndicator={false}
+									scrollEventThrottle={16}
+									removeClippedSubviews={false}
+									initialNumToRender={activeOffers.length || 5}
+									maxToRenderPerBatch={activeOffers.length || 5}
+									windowSize={activeOffers.length + 1}
 									onViewableItemsChanged={onViewableItemsChanged}
 									viewabilityConfig={viewabilityConfig}
+									getItemLayout={(_, index) => ({
+										length: SCREEN_WIDTH,
+										offset: SCREEN_WIDTH * index,
+										index,
+									})}
+									onScrollToIndexFailed={(info) => {
+										setTimeout(() => {
+											offersCarouselRef.current?.scrollToOffset({
+												offset: info.index * SCREEN_WIDTH,
+												animated: true,
+											});
+										}, 50);
+									}}
+									onScrollBeginDrag={() => {
+										isUserInteractingRef.current = true;
+										stopOffersCarouselTimer();
+									}}
+									onScrollEndDrag={() => {
+										isUserInteractingRef.current = false;
+										startOffersCarouselTimer();
+									}}
+									onMomentumScrollEnd={(e) => {
+										isUserInteractingRef.current = false;
+										const offset = e.nativeEvent.contentOffset.x;
+										const idx = Math.round(offset / SCREEN_WIDTH);
+										if (idx >= 0 && idx < activeOffers.length) {
+											if (activeOfferIndexRef.current !== idx) {
+												try {
+													LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+												} catch (_) {}
+												setActiveOfferIndex(idx);
+												activeOfferIndexRef.current = idx;
+											}
+										}
+										startOffersCarouselTimer();
+									}}
 									renderItem={({ item }) => (
-										<View style={{ width: Dimensions.get('window').width }}>
+										<View style={{ width: SCREEN_WIDTH }}>
 											<TouchableOpacity
 												style={[styles.heroCard, { marginHorizontal: 20, marginVertical: 0, padding: 0 }]}
 												onPress={() => router.push('/offers')}
-												activeOpacity={0.9}
+												activeOpacity={0.92}
 											>
-												<View style={{ position: 'absolute', inset: 0, backgroundColor: '#2D3C1F' }}>
+												<View style={{ position: 'absolute', inset: 0, backgroundColor: '#1D2A14' }}>
 													<AppImage
 														uri={item.product_image_url}
-														style={{ width: '100%', height: '100%', opacity: 0.4 }}
+														style={{ width: '100%', height: '100%', opacity: 0.35 }}
 														iconName="local-offer"
 														iconSize={40}
 													/>
 												</View>
-												<View style={[styles.heroContent, { zIndex: 1, padding: 20 }]}>
+
+												{/* Top Tag Row */}
+												<View style={styles.offerCardTopBar}>
 													<View style={styles.offerDiscountBadge}>
+														<MaterialIcons name="local-offer" size={12} color="#FFF" />
 														<Text style={styles.offerDiscountText}>خصم {item.discount_percentage}%</Text>
 													</View>
+												</View>
+
+												<View style={[styles.heroContent, { zIndex: 1, padding: 18, paddingTop: 46 }]}>
 													<Text style={styles.heroTitle} numberOfLines={2}>{item.product_name}</Text>
-													<View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 14 }}>
+													<View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 12 }}>
 														<Text style={{ color: '#FFF', fontSize: 24, fontWeight: 'bold' }}>{item.offer_price} ج.م</Text>
-														<Text style={{ color: '#BACDA5', fontSize: 16, textDecorationLine: 'line-through' }}>{item.original_price}</Text>
+														<Text style={{ color: '#BACDA5', fontSize: 15, textDecorationLine: 'line-through' }}>{item.original_price} ج.م</Text>
+														{Number(item.original_price) > Number(item.offer_price) && (
+															<View style={styles.savingsPill}>
+																<Text style={styles.savingsPillText}>
+																	وفر {(Number(item.original_price) - Number(item.offer_price)).toFixed(0)} ج
+																</Text>
+															</View>
+														)}
 													</View>
-													<TouchableOpacity
-														style={styles.heroCtaBtn}
-														onPress={() => router.push('/offers')}
-													>
-														<Text style={styles.heroCtaText}>تسوق العرض الآن</Text>
-													</TouchableOpacity>
+													<View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', width: '100%' }}>
+														<TouchableOpacity
+															style={styles.heroCtaBtn}
+															onPress={() => router.push('/offers')}
+															activeOpacity={0.85}
+														>
+															<Text style={styles.heroCtaText}>تسوق العرض الآن</Text>
+															<MaterialIcons name="arrow-back-ios" size={12} color="#FFF" />
+														</TouchableOpacity>
+													</View>
 												</View>
 											</TouchableOpacity>
 										</View>
 									)}
 								/>
 								{activeOffers.length > 1 && (
-									<View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12, gap: 6 }}>
+									<View style={styles.dotsContainer}>
 										{activeOffers.map((_, idx) => (
-											<View
+											<TouchableOpacity
 												key={idx}
-												style={{
-													width: activeOfferIndex === idx ? 20 : 8,
-													height: 8,
-													borderRadius: 4,
-													backgroundColor: activeOfferIndex === idx ? '#2D3C1F' : '#D4EAB7',
+												onPress={() => {
+													try {
+														LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+													} catch (_) {}
+													offersCarouselRef.current?.scrollToIndex({ index: idx, animated: true });
+													setActiveOfferIndex(idx);
+													activeOfferIndexRef.current = idx;
+													startOffersCarouselTimer();
 												}}
+												hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+												style={[
+													styles.dot,
+													activeOfferIndex === idx ? styles.dotActive : styles.dotInactive,
+												]}
 											/>
 										))}
 									</View>
@@ -418,8 +630,10 @@ export default function MobileHomeScreen() {
 									<TouchableOpacity
 										style={styles.heroCtaBtn}
 										onPress={() => router.push('/offers')}
+										activeOpacity={0.85}
 									>
 										<Text style={styles.heroCtaText}>تسوق العروض الآن</Text>
+										<MaterialIcons name="arrow-back-ios" size={12} color="#FFF" />
 									</TouchableOpacity>
 								</View>
 							</View>
@@ -636,10 +850,51 @@ const styles = StyleSheet.create({
 	greetingHeader: {
 		flexDirection: "row-reverse",
 		alignItems: "center",
+		justifyContent: "space-between",
 		paddingHorizontal: 20,
 		marginTop: 14,
 		marginBottom: 10,
+	},
+	greetingRight: {
+		flexDirection: "row-reverse",
+		alignItems: "center",
 		gap: 12,
+		flex: 1,
+	},
+	notificationBellBtn: {
+		width: 44,
+		height: 44,
+		borderRadius: 14,
+		backgroundColor: "#FFFFFF",
+		borderWidth: 1,
+		borderColor: "#EAE8E2",
+		alignItems: "center",
+		justifyContent: "center",
+		position: "relative",
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: 1 },
+		shadowOpacity: 0.05,
+		shadowRadius: 3,
+		elevation: 1,
+	},
+	bellBadge: {
+		position: "absolute",
+		top: -4,
+		right: -4,
+		backgroundColor: "#BA1A1A",
+		borderRadius: 10,
+		minWidth: 18,
+		height: 18,
+		alignItems: "center",
+		justifyContent: "center",
+		paddingHorizontal: 4,
+		borderWidth: 1.5,
+		borderColor: "#FFFFFF",
+	},
+	bellBadgeText: {
+		color: "#FFFFFF",
+		fontSize: 10,
+		fontWeight: "bold",
 	},
 	userAvatarBadge: {
 		width: 44,
@@ -661,6 +916,58 @@ const styles = StyleSheet.create({
 		fontSize: 12,
 		color: "#75786E",
 		marginTop: 2,
+	},
+	adminModeNoticeBar: {
+		flexDirection: "row-reverse",
+		alignItems: "center",
+		justifyContent: "space-between",
+		marginHorizontal: 20,
+		marginBottom: 12,
+		paddingHorizontal: 14,
+		paddingVertical: 10,
+		borderRadius: 16,
+		backgroundColor: "#FFFFFF",
+		borderWidth: 1.5,
+		borderColor: "#D4EAB7",
+		shadowColor: "#1E3E2B",
+		shadowOffset: { width: 0, height: 2 },
+		shadowOpacity: 0.07,
+		shadowRadius: 4,
+		elevation: 2,
+	},
+	adminCrownCircle: {
+		width: 34,
+		height: 34,
+		borderRadius: 17,
+		backgroundColor: "#1E3E2B",
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	adminModeNoticeTitle: {
+		fontSize: 12,
+		fontWeight: "bold",
+		color: "#1A2D23",
+	},
+	adminModeNoticeSub: {
+		fontSize: 10,
+		color: "#7C7870",
+		marginTop: 1,
+	},
+	adminModeNoticeBtn: {
+		flexDirection: "row-reverse",
+		alignItems: "center",
+		gap: 4,
+		backgroundColor: "#EEF4F1",
+		paddingHorizontal: 10,
+		paddingVertical: 6,
+		borderRadius: 10,
+		borderWidth: 1,
+		borderColor: "#D0E2D8",
+	},
+	adminModeNoticeBtnText: {
+		fontSize: 11,
+		fontWeight: "bold",
+		color: "#1E3E2B",
 	},
 	heroCard: {
 		marginHorizontal: 20,
@@ -687,6 +994,10 @@ const styles = StyleSheet.create({
 		textAlign: "right",
 	},
 	heroCtaBtn: {
+		flexDirection: "row-reverse",
+		alignItems: "center",
+		justifyContent: "center",
+		gap: 6,
 		backgroundColor: "#455330",
 		paddingHorizontal: 16,
 		paddingVertical: 8,
@@ -916,6 +1227,16 @@ const styles = StyleSheet.create({
 		color: "#75786E",
 	},
 	// ── Offer Styles ──
+	offerCardTopBar: {
+		position: 'absolute',
+		top: 14,
+		left: 16,
+		right: 16,
+		flexDirection: 'row-reverse',
+		justifyContent: 'space-between',
+		alignItems: 'center',
+		zIndex: 10,
+	},
 	offerCard: {
 		width: 140,
 		backgroundColor: "#FFF",
@@ -926,19 +1247,77 @@ const styles = StyleSheet.create({
 		position: "relative",
 	},
 	offerDiscountBadge: {
-		position: "absolute",
-		top: 8,
-		left: 8,
+		flexDirection: 'row-reverse',
+		alignItems: 'center',
+		gap: 4,
 		backgroundColor: "#BA1A1A",
-		paddingHorizontal: 6,
-		paddingVertical: 2,
+		paddingHorizontal: 8,
+		paddingVertical: 3,
 		borderRadius: 8,
 		zIndex: 10,
 	},
 	offerDiscountText: {
 		color: "#FFF",
-		fontSize: 10,
+		fontSize: 11,
 		fontWeight: "bold",
+	},
+	offerFlameBadge: {
+		flexDirection: 'row-reverse',
+		alignItems: 'center',
+		gap: 4,
+		backgroundColor: 'rgba(0, 0, 0, 0.45)',
+		paddingHorizontal: 8,
+		paddingVertical: 3,
+		borderRadius: 8,
+		borderWidth: 0.5,
+		borderColor: 'rgba(255, 255, 255, 0.25)',
+	},
+	offerFlameText: {
+		color: '#FFF',
+		fontSize: 10,
+		fontWeight: 'bold',
+	},
+	savingsPill: {
+		backgroundColor: 'rgba(186, 26, 26, 0.25)',
+		paddingHorizontal: 8,
+		paddingVertical: 2,
+		borderRadius: 6,
+		borderWidth: 1,
+		borderColor: '#BA1A1A',
+	},
+	savingsPillText: {
+		color: '#FFB4AB',
+		fontSize: 11,
+		fontWeight: 'bold',
+	},
+	autoAdvanceIndicator: {
+		flexDirection: 'row-reverse',
+		alignItems: 'center',
+		gap: 4,
+		opacity: 0.85,
+	},
+	autoAdvanceText: {
+		color: '#BACDA5',
+		fontSize: 10,
+	},
+	dotsContainer: {
+		flexDirection: 'row',
+		justifyContent: 'center',
+		alignItems: 'center',
+		marginTop: 10,
+		gap: 6,
+	},
+	dot: {
+		height: 8,
+		borderRadius: 4,
+	},
+	dotActive: {
+		width: 24,
+		backgroundColor: '#2D3C1F',
+	},
+	dotInactive: {
+		width: 8,
+		backgroundColor: '#D4EAB7',
 	},
 	offerImage: {
 		width: "100%",
